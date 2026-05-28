@@ -53,6 +53,47 @@ service cloud.firestore {
              hasAllDenomKeys(data.denoms) &&
              denomsAllNonNegInt(data.denoms) &&
              denomsSumEq(data.denoms, data.amount) &&
+             data.voucherId is string &&
+             data.routeId is string &&
+             isYmd(data.txDate);
+    }
+
+    function fundValid(data) {
+      return data.title is string &&
+             data.title.size() > 0 &&
+             data.title.size() <= 60 &&
+             (data.remark == null || data.remark is string) &&
+             isInt(data.amount) && data.amount >= 0 &&
+             data.denoms is map &&
+             hasAllDenomKeys(data.denoms) &&
+             denomsAllNonNegInt(data.denoms) &&
+             denomsSumEq(data.denoms, data.amount) &&
+             isYmd(data.txDate) &&
+             data.createdAt is timestamp;
+    }
+
+    function ledgerEntryValid(data) {
+      return data.ledgerId is string &&
+             data.kind in ['in', 'out'] &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+             isInt(data.amount) && data.amount >= 0 &&
+             data.denoms is map &&
+             hasAllDenomKeys(data.denoms) &&
+             denomsAllNonNegInt(data.denoms) &&
+             denomsSumEq(data.denoms, data.amount) &&
+             isYmd(data.txDate);
+    }
+
+    function exchangeValid(data) {
+      return isInt(data.amount) && data.amount >= 0 &&
+             data.fromDenoms is map &&
+             hasAllDenomKeys(data.fromDenoms) &&
+             denomsAllNonNegInt(data.fromDenoms) &&
+             denomsSumEq(data.fromDenoms, data.amount) &&
+             data.toDenoms is map &&
+             hasAllDenomKeys(data.toDenoms) &&
+             denomsAllNonNegInt(data.toDenoms) &&
+             denomsSumEq(data.toDenoms, data.amount) &&
              isYmd(data.txDate);
     }
 
@@ -74,6 +115,31 @@ service cloud.firestore {
         allow read:   if isOwner(uid);
         allow create: if isOwner(uid) && spendValid(request.resource.data);
         allow update: if isOwner(uid) && spendValid(request.resource.data);
+        allow delete: if isOwner(uid);
+      }
+
+      match /funds/{fundId} {
+        allow read:   if isOwner(uid);
+        allow create: if isOwner(uid) && fundValid(request.resource.data);
+        allow update: if isOwner(uid) && fundValid(request.resource.data);
+        allow delete: if isOwner(uid);
+      }
+
+      match /ledgers/{ledgerId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      match /ledgerEntries/{entryId} {
+        allow read:   if isOwner(uid);
+        allow create: if isOwner(uid) && ledgerEntryValid(request.resource.data);
+        allow update: if isOwner(uid) && ledgerEntryValid(request.resource.data);
+        allow delete: if isOwner(uid);
+      }
+
+      match /exchanges/{exchangeId} {
+        allow read:   if isOwner(uid);
+        allow create: if isOwner(uid) && exchangeValid(request.resource.data);
+        allow update: if isOwner(uid) && exchangeValid(request.resource.data);
         allow delete: if isOwner(uid);
       }
 

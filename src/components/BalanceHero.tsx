@@ -7,10 +7,12 @@ import { DenomTally } from "./DenomTally";
 interface Props {
   verified: number;
   unverified: number;
+  ledger: number;
   spent: number;
   net: number;
   verifiedDenoms: DenomCounts;
   unverifiedDenoms: DenomCounts;
+  ledgerDenoms: DenomCounts;
   spentDenoms: DenomCounts;
   netDenoms: DenomCounts;
 }
@@ -72,16 +74,19 @@ function ExpandableRow({
 export function BalanceHero({
   verified,
   unverified,
+  ledger,
   spent,
   net,
   verifiedDenoms,
   unverifiedDenoms,
+  ledgerDenoms,
   spentDenoms,
   netDenoms,
 }: Props) {
   const [open, setOpen] = useState({
     verified: false,
     unverified: false,
+    ledger: false,
     spent: false,
   });
 
@@ -103,7 +108,9 @@ export function BalanceHero({
         <DenomTally counts={netDenoms} />
       </div>
 
-      {/* Breakdown — expandable rows, each reveals its denom tally. */}
+      {/* Breakdown — expandable rows, each reveals its denom tally. Funds are
+          folded into VERIFIED (a direct fund add is a verified inflow); the
+          LEDGER row holds the net of in − out across all ledgers. */}
       <div className="flex flex-col">
         <ExpandableRow
           label="VERIFIED"
@@ -118,6 +125,13 @@ export function BalanceHero({
           counts={unverifiedDenoms}
           expanded={open.unverified}
           onToggle={() => setOpen((o) => ({ ...o, unverified: !o.unverified }))}
+        />
+        <ExpandableRow
+          label="LEDGER"
+          value={ledger}
+          counts={ledgerDenoms}
+          expanded={open.ledger}
+          onToggle={() => setOpen((o) => ({ ...o, ledger: !o.ledger }))}
         />
         <ExpandableRow
           label="SPENT"

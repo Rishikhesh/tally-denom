@@ -49,11 +49,30 @@ describe("buildActivity()", () => {
       "spend.create",
       "spend.edit",
       "spend.delete",
+      "fund.create",
+      "fund.edit",
+      "fund.delete",
     ];
     for (const t of types) {
       const out = buildActivity({ type: t, refId: "x", title: "y" });
       expect(out.type).toBe(t);
     }
+  });
+
+  test("supports a fund.create event", () => {
+    const out = buildActivity({
+      type: "fund.create",
+      refId: "fd_1",
+      title: "Fund ₹2000 – ATM withdrawal",
+      amount: 2000,
+      txDate: "2026-05-28",
+    });
+    expect(out.type).toBe("fund.create");
+    expect(out.refId).toBe("fd_1");
+    expect(out.title).toBe("Fund ₹2000 – ATM withdrawal");
+    expect(out.amount).toBe(2000);
+    expect(out.txDate).toBe("2026-05-28");
+    expect(out.routeId).toBeNull();
   });
 
   test("does not attach createdAt — that is the caller's job via serverTimestamp()", () => {

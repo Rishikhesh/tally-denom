@@ -1,16 +1,26 @@
 import { ChevronLeft } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { DatePickerSheet, DenomLine, DenomRow, Loader } from "@/components";
+import { useMemo, useState } from "react";
+import {
+  DatePickerSheet,
+  DenomLine,
+  DenomRow,
+  Loader,
+  SegControl,
+} from "@/components";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import {
-  createSpend,
-  editSpend,
+  createLedgerEntry,
+  editLedgerEntry,
+  useAllExchanges,
+  useAllFunds,
+  useAllLedgerEntries,
   useAllSpends,
   useAllVouchers,
-  useSpendsByVoucher,
+  useLedgerEntries,
 } from "@/hooks/useData";
+import { denomInventory } from "@/lib/balances";
 import { useNavStore } from "@/hooks/useNavStore";
 import { formatDate, todayInputDate } from "@/lib/date";
 import {
@@ -30,35 +40,30 @@ function formatINR(n: number): string {
   });
 }
 
-export default function SpendEditorScreen() {
+export default function LedgerEntryEditorScreen() {
   const { user, loading } = useAuth();
   const top = useNavStore((s) => s.stack[s.stack.length - 1]);
-  const spendId =
-    top && top.params ? (top.params.spendId as string | undefined) ?? null : null;
-  const navVoucherId =
+  const ledgerId =
     top && top.params
-      ? (top.params.voucherId as string | undefined) ?? null
+      ? (top.params.ledgerId as string | undefined) ?? null
       : null;
-  const navRouteId =
+  const entryId =
     top && top.params
-      ? (top.params.routeId as string | undefined) ?? null
+      ? (top.params.entryId as string | undefined) ?? null
       : null;
 
-  // Prefer scoped lookup when we have a voucherId in nav params; fall back
-  // to the global list (e.g. when editing from RecordsScreen which doesn't
-  // pass routeId/voucherId yet).
-  const spendsForVoucher = useSpendsByVoucher(navVoucherId);
-  const allSpends = useAllSpends();
-  const existing = spendId
-    ? (navVoucherId
-        ? spendsForVoucher.find((s) => s.id === spendId)
-        : allSpends.find((s) => s.id === spendId)) ?? null
+  // Same render-time hydrate-from-list pattern as the other editors.
+  const entries = useLedgerEntries(ledgerId);
+  const existing = entryId
+    ? entries.find((e) => e.id === entryId) ?? null
     : null;
 
   const [hydratedId, setHydratedId] = useState<string | null>(
-    spendId ? null : "__new__",
+    entryId ? null : "__new__",
   );
 
+  const [kind, setKind] = useState<"in" | "out">("in");
+  const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
   const [denoms, setDenoms] = useState<DenomCounts>(emptyDenoms());
   const [txDate, setTxDate] = useState<string>(todayInputDate());
@@ -66,104 +71,107 @@ export default function SpendEditorScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (spendId && existing && hydratedId !== spendId) {
-    setNote(existing.note);
+  if (entryId && existing && hydratedId !== entryId) {
+    setKind(existing.kind);
+    setTitle(existing.title);
+    setNote(existing.note ?? "");
     setDenoms({ ...existing.denoms });
     setTxDate(existing.txDate || todayInputDate());
-    setHydratedId(spendId);
+    setHydratedId(entryId);
   }
   const hydrated = hydratedId !== null;
-  const isEditing = !!spendId;
-
-  // Defensive bail: a fresh spend MUST have voucherId+routeId in nav params.
-  // Older callers (which shouldn't exist anymore) would land here without
-  // them — pop back rather than create an orphaned spend.
-  useEffect(() => {
-    if (!loading && !spendId && (!navVoucherId || !navRouteId)) {
-      useNavStore.getState().goBack();
-    }
-  }, [loading, spendId, navVoucherId, navRouteId]);
-
-  // For edit-mode the existing doc already carries routeId/voucherId — use
-  // those as the source of truth if nav params are missing.
-  const effectiveVoucherId = navVoucherId ?? existing?.voucherId ?? null;
-  const effectiveRouteId = navRouteId ?? existing?.routeId ?? null;
-
-  // Cap each denom by what the parent voucher still has after subtracting
-  // other (non-self) spends already tied to it. Voucher denoms — sum(other
-  // spends' denoms). Bail to zero cap if voucher missing.
-  const allVouchers = useAllVouchers();
-  const voucher = effectiveVoucherId
-    ? allVouchers.find((v) => v.id === effectiveVoucherId) ?? null
-    : null;
-  const availableInVoucher = useMemo<DenomCounts>(() => {
-    const out: DenomCounts = emptyDenoms();
-    if (!voucher) return out;
-    for (const d of DENOMS) out[d] = voucher.denoms[d];
-    for (const s of spendsForVoucher) {
-      if (spendId && s.id === spendId) continue; // exclude self
-      for (const d of DENOMS) out[d] -= s.denoms[d];
-    }
-    return out;
-  }, [voucher, spendsForVoucher, spendId]);
-  const overCap = DENOMS.some((d) => denoms[d] > Math.max(0, availableInVoucher[d]));
+  const isEditing = !!entryId;
 
   const amountNumeric = sumDenoms(denoms);
   const dateValid = ISO_RE.test(txDate);
   const denomsOk = isValidCounts(denoms);
 
+  // OUT cap: available = main NET denom inventory (cash drawer). When editing
+  // an existing OUT entry, add its denoms back so the user can re-allocate
+  // without phantom debt.
+  const allVouchers = useAllVouchers();
+  const allSpends = useAllSpends();
+  const allFunds = useAllFunds();
+  const allLedgerEntries = useAllLedgerEntries();
+  const allExchanges = useAllExchanges();
+  const editingOut = !!existing && existing.kind === "out";
+  const availableForOut = useMemo<DenomCounts>(() => {
+    const inv = denomInventory(
+      allVouchers,
+      allSpends,
+      allFunds,
+      allLedgerEntries,
+      allExchanges,
+    );
+    if (editingOut && existing) {
+      for (const d of DENOMS) inv[d] += existing.denoms[d];
+    }
+    return inv;
+  }, [
+    allVouchers,
+    allSpends,
+    allFunds,
+    allLedgerEntries,
+    allExchanges,
+    editingOut,
+    existing,
+  ]);
+  const isOut = kind === "out";
+  const overCap = isOut
+    ? DENOMS.some((d) => denoms[d] > Math.max(0, availableForOut[d]))
+    : false;
+
   const canSave =
     !!user &&
-    !!effectiveVoucherId &&
-    !!effectiveRouteId &&
-    note.trim().length > 0 &&
+    !!ledgerId &&
+    title.trim().length > 0 &&
     amountNumeric > 0 &&
     denomsOk &&
     dateValid &&
     !overCap &&
     !saving &&
-    (!spendId || hydrated);
+    (!entryId || hydrated);
 
   let disabledReason: string | null = null;
   if (!saving) {
-    if (!note.trim()) disabledReason = "Enter a note to save";
+    if (!title.trim()) disabledReason = "Enter a title to save";
     else if (amountNumeric <= 0)
       disabledReason = "Add at least one note or coin";
     else if (!denomsOk)
       disabledReason = "Denomination counts must be whole numbers ≥ 0";
     else if (!dateValid) disabledReason = "Pick a valid date";
-    else if (overCap) disabledReason = "Spend cannot exceed voucher denoms";
-    else if (!effectiveVoucherId || !effectiveRouteId)
-      disabledReason = "Spend must be attached to a voucher";
+    else if (overCap) disabledReason = "Out cannot exceed cash on hand";
   }
 
   async function handleSave() {
-    if (!canSave || !user || !effectiveVoucherId || !effectiveRouteId) return;
+    if (!canSave || !user || !ledgerId) return;
     setSaving(true);
     setError(null);
     try {
-      if (spendId) {
-        await editSpend(user.uid, spendId, {
-          note: note.trim(),
-          category: null,
+      const noteValue = note.trim().length > 0 ? note.trim() : null;
+      if (entryId) {
+        await editLedgerEntry(user.uid, entryId, {
+          kind,
+          title: title.trim(),
           amount: amountNumeric,
           denoms,
+          note: noteValue,
           txDate,
         });
       } else {
-        await createSpend(user.uid, {
-          voucherId: effectiveVoucherId,
-          routeId: effectiveRouteId,
-          note: note.trim(),
-          category: null,
+        await createLedgerEntry(user.uid, {
+          ledgerId,
+          kind,
+          title: title.trim(),
           amount: amountNumeric,
           denoms,
+          note: noteValue,
           txDate,
         });
       }
       useNavStore.getState().goBack();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save spend");
+      setError(e instanceof Error ? e.message : "Failed to save entry");
       setSaving(false);
     }
   }
@@ -172,7 +180,7 @@ export default function SpendEditorScreen() {
     useNavStore.getState().goBack();
   }
 
-  if (loading || (spendId && !hydrated)) {
+  if (loading || !ledgerId || (entryId && !hydrated)) {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader />
@@ -192,27 +200,52 @@ export default function SpendEditorScreen() {
           <ChevronLeft size={18} />
         </button>
         <div className="flex flex-col">
-          <div className="eyebrow">03 / SPEND</div>
+          <div className="eyebrow">03 / LEDGER ENTRY</div>
           <h1 className="font-display text-lg">
-            {isEditing ? "Edit spend" : "Add spend"}
+            {isEditing ? "Edit entry" : "Add entry"}
           </h1>
         </div>
       </header>
 
-      {/* Fixed top: NOTE + DATE + AMOUNT. Stays visible while user scrolls
-          the denominations. */}
+      {/* Fixed top: KIND + NOTE + DATE + AMOUNT */}
       <div className="border-b border-[var(--color-border)] px-5 py-3">
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1">
-            <Label htmlFor="sp-note" className="eyebrow">
+            <span className="eyebrow">KIND</span>
+            <SegControl
+              options={[
+                { id: "in", label: "In" },
+                { id: "out", label: "Out" },
+              ]}
+              value={kind}
+              onChange={(v) => setKind(v === "out" ? "out" : "in")}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="le-title" className="eyebrow">
+              TITLE
+            </Label>
+            <Input
+              id="le-title"
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Salary, Rent"
+              className="h-10 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 text-base text-[var(--color-text)] shadow-none focus-visible:ring-0"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="le-note" className="eyebrow">
               NOTE
             </Label>
             <Input
-              id="sp-note"
+              id="le-note"
               type="text"
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="Petrol"
+              placeholder="Optional"
               className="h-10 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 text-base text-[var(--color-text)] shadow-none focus-visible:ring-0"
             />
           </div>
@@ -238,17 +271,17 @@ export default function SpendEditorScreen() {
         </div>
       </div>
 
-      {/* Scrollable denominations list — the only thing that scrolls. */}
+      {/* Scrollable denominations */}
       <div className="flex-1 overflow-y-auto px-5 py-3">
         <div className="eyebrow mb-2">04 / DENOMINATIONS</div>
-        {voucher && (
+        {isOut && (
           <div className="mb-2 flex flex-col gap-1 border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2">
             <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-muted)]">
-              AVAILABLE IN VOUCHER
+              AVAILABLE ON HAND
             </span>
-            <DenomLine counts={availableInVoucher} emphasis="destructive" />
+            <DenomLine counts={availableForOut} emphasis="destructive" />
             <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-muted)]">
-              Red = no more of that denom remains
+              Red = drawer over-spent on that denom · use exchange to balance
             </span>
           </div>
         )}
@@ -258,7 +291,7 @@ export default function SpendEditorScreen() {
               key={d}
               denom={d}
               count={denoms[d]}
-              max={Math.max(0, availableInVoucher[d])}
+              max={isOut ? Math.max(0, availableForOut[d]) : undefined}
               onChange={(next) => setDenoms({ ...denoms, [d]: next })}
             />
           ))}
@@ -281,7 +314,7 @@ export default function SpendEditorScreen() {
           onClick={() => void handleSave()}
           className="h-12 w-full border border-[var(--color-border-strong)] bg-[var(--color-accent)] text-sm font-bold uppercase tracking-[0.12em] text-[var(--color-accent-ink)] disabled:opacity-40"
         >
-          {saving ? "Saving…" : isEditing ? "Update spend" : "Save spend"}
+          {saving ? "Saving…" : isEditing ? "Update entry" : "Save entry"}
         </button>
         {!canSave && disabledReason && (
           <div className="mt-2 text-center font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--color-text-muted)]">
@@ -298,7 +331,7 @@ export default function SpendEditorScreen() {
             setDateSheetOpen(false);
           }}
           onClose={() => setDateSheetOpen(false)}
-          eyebrow="Spend date"
+          eyebrow="Entry date"
           title="Pick date"
         />
       )}

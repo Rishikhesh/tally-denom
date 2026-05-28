@@ -12,8 +12,11 @@ import {
 } from "../src/lib/denoms";
 
 describe("DENOMS constant", () => {
-  test("matches the INR ledger set (no ₹2000)", () => {
-    expect([...DENOMS]).toEqual([500, 200, 100, 50, 20, 10, 5, 2, 1]);
+  test("matches the active INR ledger set (no ₹2000 / ₹5 / ₹2)", () => {
+    expect([...DENOMS]).toEqual([500, 200, 100, 50, 20, 10, 1]);
+  });
+  test("has exactly 7 entries", () => {
+    expect(DENOMS.length).toBe(7);
   });
 });
 
@@ -21,6 +24,14 @@ describe("emptyDenoms()", () => {
   test("returns zero for every denom", () => {
     const e = emptyDenoms();
     for (const d of DENOMS) expect(e[d]).toBe(0);
+  });
+  test("has 7 keys and no ₹5 or ₹2", () => {
+    const e = emptyDenoms() as Record<string | number, number>;
+    expect(Object.keys(e).length).toBe(7);
+    expect(5 in e).toBe(false);
+    expect(2 in e).toBe(false);
+    expect("5" in e).toBe(false);
+    expect("2" in e).toBe(false);
   });
   test("returns a fresh object each call", () => {
     const a = emptyDenoms();
@@ -42,11 +53,9 @@ describe("sumDenoms()", () => {
       50: 0,
       20: 5, // 100
       10: 1, // 10
-      5: 2, // 10
-      2: 0,
       1: 7, // 7
     };
-    expect(sumDenoms(c)).toBe(1627);
+    expect(sumDenoms(c)).toBe(1617);
   });
 });
 
@@ -59,11 +68,9 @@ describe("totalNotes()", () => {
       50: 0,
       20: 5,
       10: 1,
-      5: 2,
-      2: 0,
       1: 7,
     };
-    expect(totalNotes(c)).toBe(21);
+    expect(totalNotes(c)).toBe(19);
   });
   test("zero on empty", () => {
     expect(totalNotes(emptyDenoms())).toBe(0);
@@ -125,7 +132,20 @@ describe("toWire() / fromWire()", () => {
     expect(w.D200).toBe(0);
     expect(w.D1).toBe(7);
   });
-  test("round-trips through fromWire", () => {
+  test("toWire(emptyDenoms()) still ships D5 = 0 and D2 = 0", () => {
+    const w = toWire(emptyDenoms());
+    expect(w.D5).toBe(0);
+    expect(w.D2).toBe(0);
+  });
+  test("toWire always emits D5 = 0 and D2 = 0 — they're not tracked client-side", () => {
+    const c = emptyDenoms();
+    c[500] = 1;
+    c[100] = 3;
+    const w = toWire(c);
+    expect(w.D5).toBe(0);
+    expect(w.D2).toBe(0);
+  });
+  test("round-trips through fromWire for the 7-denom set", () => {
     const c: DenomCounts = {
       500: 2,
       200: 0,
@@ -133,16 +153,33 @@ describe("toWire() / fromWire()", () => {
       50: 4,
       20: 0,
       10: 1,
-      5: 0,
-      2: 6,
       1: 7,
     };
     const r = fromWire(toWire(c));
     expect(r).toEqual(c);
   });
-  test("fromWire returns all 9 numeric keys", () => {
+  test("fromWire returns the 7 numeric keys", () => {
     const w = toWire(emptyDenoms());
     const r = fromWire(w);
     for (const d of DENOMS) expect(r[d]).toBe(0);
+  });
+  test("fromWire ignores stale D5 / D2 values from historic docs", () => {
+    const w = {
+      D500: 0,
+      D200: 0,
+      D100: 0,
+      D50: 0,
+      D20: 0,
+      D10: 0,
+      D5: 99,
+      D2: 99,
+      D1: 0,
+    };
+    const r = fromWire(w) as Record<string | number, number>;
+    expect(5 in r).toBe(false);
+    expect(2 in r).toBe(false);
+    expect("5" in r).toBe(false);
+    expect("2" in r).toBe(false);
+    expect(Object.keys(r).length).toBe(7);
   });
 });

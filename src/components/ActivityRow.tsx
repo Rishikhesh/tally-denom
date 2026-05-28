@@ -1,6 +1,14 @@
-import { ChevronRight, FileText, MapPin, Wallet } from "lucide-react";
-import type { MouseEvent, ReactNode } from "react";
-import { formatDate } from "@/lib/date";
+import {
+  ArrowLeftRight,
+  ChevronRight,
+  FileText,
+  MapPin,
+  PiggyBank,
+  Scale,
+  Wallet,
+} from "lucide-react";
+import type { ReactNode } from "react";
+import { formatDate, formatTime } from "@/lib/date";
 import type { ActivityType } from "@/lib/activity";
 
 interface Activity {
@@ -17,16 +25,19 @@ interface Props {
   activity: Activity;
   onTap?: () => void;
   /**
-   * When set on a `voucher.create` row, surfaces a `[ VERIFY ]` CTA in place
-   * of the chevron and annotates the title with an `(UNVERIFIED)` hint.
+   * Optional context label appended to the title (e.g. route name for a
+   * voucher activity, voucher code for a spend activity, ledger name for a
+   * ledger-entry activity). Rendered muted, normal-weight.
    */
-  unverified?: boolean;
-  onVerify?: () => void;
+  contextLabel?: string;
 }
 
 function renderIcon(type: ActivityType): ReactNode {
   if (type.startsWith("voucher.")) return <FileText size={16} />;
   if (type.startsWith("spend.")) return <Wallet size={16} />;
+  if (type.startsWith("fund.")) return <PiggyBank size={16} />;
+  if (type.startsWith("ledger")) return <Scale size={16} />;
+  if (type.startsWith("exchange.")) return <ArrowLeftRight size={16} />;
   return <MapPin size={16} />;
 }
 
@@ -37,44 +48,18 @@ function formatINR(n: number): string {
   });
 }
 
-function relativeTime(createdAt: number, now: number = Date.now()): string {
-  const diff = Math.max(0, now - createdAt);
-  const sec = Math.floor(diff / 1000);
-  if (sec < 60) return "just now";
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min} min ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr} h ago`;
-  const day = Math.floor(hr / 24);
-  if (day < 7) return `${day} d ago`;
-  const d = new Date(createdAt);
-  const weekday = d.toLocaleDateString("en", { weekday: "short" });
-  const dayNum = String(d.getDate()).padStart(2, "0");
-  const month = d.toLocaleDateString("en", { month: "short" });
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${weekday} ${dayNum} ${month} ${hh}:${mm}`;
-}
 
-export function ActivityRow({
-  activity,
-  onTap,
-  unverified,
-  onVerify,
-}: Props) {
-  const tappable = typeof onTap === "function";
-  const isVoucherCreate = activity.type === "voucher.create";
-  const showVerifyCta = isVoucherCreate && unverified === true && !!onVerify;
-  const showUnverifiedBadge = isVoucherCreate && unverified === true;
+export function ActivityRow({ activity, onTap, contextLabel }: Props) {
+  // Delete activities point at a now-gone target — no chevron, no tap.
+  const isDelete = activity.type.endsWith(".delete");
+  const tappable = !isDelete && typeof onTap === "function";
 
-  const metaParts: string[] = [relativeTime(activity.createdAt)];
+  // Meta line: actual recorded time in IST 12hr + transaction date + amount.
+  const metaParts: string[] = [formatTime(activity.createdAt)];
   if (activity.txDate) metaParts.push(formatDate(activity.txDate));
   if (activity.amount != null) metaParts.push(`₹${formatINR(activity.amount)}`);
-
-  function handleVerifyClick(e: MouseEvent<HTMLButtonElement>) {
-    e.stopPropagation();
-    if (onVerify) onVerify();
-  }
+  // Caller-supplied context (route name / voucher code / ledger name).
+  const titleContextSuffix = contextLabel ? ` · ${contextLabel}` : "";
 
   const icon = (
     <div className="flex h-9 w-9 shrink-0 items-center justify-center border border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)]">
@@ -82,22 +67,68 @@ export function ActivityRow({
     </div>
   );
 
-  // Strip the trailing action verb so the title reads as the entity, not
-  // "VCH #X created". The icon already conveys the action.
-  const cleanTitle = activity.title.replace(
-    / (created|edited|deleted|verified|unverified)$/i,
-    "",
-  );
+  // Clean the title: drop redundant entity-type prefix (icon conveys it),
+  // drop the inline ₹amount token (already in meta line), drop the trailing
+  // action verb, and tidy stray separators. Leaves just the human-meaningful
+  // entity name (note / title / code) — falls back to the entity type label
+  // when stripping empties the string (e.g. plain `Exchange`).
+  let t = activity.title;
+  t = t.replace(/^(Spend|Inflow|Fund|Ledger|Exchange) /, "");
+  t = t.replace(/^₹[\d,]+(?:\.\d+)?\s*/, "");
+  t = t.replace(/^(in|out)\s+/i, "");
+  t = t.replace(/^[–-]\s*/, "");
+  t = t.replace(/ (created|edited|deleted|verified|unverified)$/i, "");
+  t = t.trim();
+  let cleanTitle = t;
+  if (!cleanTitle) {
+    if (activity.type.startsWith("exchange.")) cleanTitle = "Exchange";
+    else if (activity.type.startsWith("spend.")) cleanTitle = "Spend";
+    else if (activity.type.startsWith("fund.")) cleanTitle = "Inflow";
+    else if (activity.type.startsWith("ledger")) cleanTitle = "Ledger";
+    else cleanTitle = activity.title;
+  }
+
+  // Ledger-entry kind badge (IN / OUT) — surfaced as a chip so the icon's
+  // identity is preserved without cluttering the title.
+  const ledgerKind: "in" | "out" | null =
+    activity.type.startsWith("ledger-entry.") &&
+    typeof activity.meta?.kind === "string"
+      ? (activity.meta.kind as string) === "out"
+        ? "out"
+        : "in"
+      : null;
 
   const body = (
     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
       <span className="flex min-w-0 items-baseline gap-1.5">
-        <span className="min-w-0 truncate text-sm font-semibold text-[var(--color-text)]">
+        <span
+          className={
+            isDelete
+              ? "min-w-0 truncate text-sm font-semibold text-[var(--color-text-muted)] line-through"
+              : "min-w-0 truncate text-sm font-semibold text-[var(--color-text)]"
+          }
+        >
           {cleanTitle}
+          {titleContextSuffix && (
+            <span className="font-normal text-[var(--color-text-muted)]">
+              {titleContextSuffix}
+            </span>
+          )}
         </span>
-        {showUnverifiedBadge && (
-          <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-text-muted)]">
-            (UNVERIFIED)
+        {ledgerKind && (
+          <span
+            className={
+              ledgerKind === "in"
+                ? "shrink-0 border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--color-accent-ink)]"
+                : "shrink-0 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--color-text)]"
+            }
+          >
+            {ledgerKind.toUpperCase()}
+          </span>
+        )}
+        {isDelete && (
+          <span className="shrink-0 border border-[var(--color-destructive)] px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--color-destructive)]">
+            DELETED
           </span>
         )}
       </span>
@@ -107,41 +138,13 @@ export function ActivityRow({
     </div>
   );
 
-  const trailing = showVerifyCta ? (
-    <button
-      type="button"
-      onClick={handleVerifyClick}
-      aria-label="Verify voucher"
-      className="shrink-0 border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--color-accent-ink)] active:opacity-80"
-    >
-      [ VERIFY ]
-    </button>
-  ) : tappable ? (
+  const trailing = tappable ? (
     <ChevronRight
       size={16}
       aria-hidden
       className="shrink-0 text-[var(--color-text-muted)]"
     />
   ) : null;
-
-  // When the row has a verify CTA, we can't wrap the whole row in a <button>
-  // (nested interactive elements are invalid). Render a div, hang the tap
-  // handler on the body, and let the inline verify CTA stop propagation.
-  if (tappable && showVerifyCta) {
-    return (
-      <div className="flex w-full items-center gap-3 border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2">
-        {icon}
-        <button
-          type="button"
-          onClick={onTap}
-          className="flex min-w-0 flex-1 items-center gap-3 text-left active:opacity-80"
-        >
-          {body}
-        </button>
-        {trailing}
-      </div>
-    );
-  }
 
   if (tappable) {
     return (
@@ -161,7 +164,6 @@ export function ActivityRow({
     <div className="flex w-full items-center gap-3 border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2">
       {icon}
       {body}
-      {trailing}
     </div>
   );
 }

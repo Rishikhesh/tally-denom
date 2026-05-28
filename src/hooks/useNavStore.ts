@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type TabId = "home" | "entry" | "activity" | "records";
+export type TabId = "home" | "entry" | "ledger" | "records";
 
 export interface NavEntry {
   /** Screen identifier — e.g. "route", "voucher-editor", "spend-editor". */

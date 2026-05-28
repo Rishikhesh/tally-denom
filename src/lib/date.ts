@@ -107,3 +107,33 @@ export function dateRangePresets(): {
     last30: { from: addDaysInput(today, -29), to: today },
   };
 }
+
+const IST_TZ = "Asia/Kolkata";
+
+/**
+ * Format an epoch-millis timestamp as IST 12-hour clock, e.g. `02:35 PM`.
+ * Used wherever we surface a recorded time (CRUD createdAt / updatedAt).
+ */
+export function formatTime(ms: number): string {
+  return new Intl.DateTimeFormat("en-IN", {
+    timeZone: IST_TZ,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(new Date(ms));
+}
+
+/**
+ * Format an epoch-millis timestamp as `DD-MM-YYYY 02:35 PM` in IST.
+ */
+export function formatDateTime(ms: number): string {
+  const datePart = new Intl.DateTimeFormat("en-GB", {
+    timeZone: IST_TZ,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  })
+    .format(new Date(ms))
+    .replace(/\//g, "-");
+  return `${datePart} ${formatTime(ms)}`;
+}

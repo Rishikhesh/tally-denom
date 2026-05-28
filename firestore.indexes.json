@@ -31,6 +31,22 @@
         { "fieldPath": "txDate", "order": "DESCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "spends",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "voucherId", "order": "ASCENDING" },
+        { "fieldPath": "txDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ledgerEntries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ledgerId", "order": "ASCENDING" },
+        { "fieldPath": "txDate", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

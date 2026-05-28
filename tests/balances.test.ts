@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
   denomInventory,
+  type Fund,
   netBalance,
   routeTotals,
   sumCollected,
+  sumFundDenoms,
+  sumFunds,
   sumSpends,
   sumUnverified,
   sumVerified,
@@ -46,8 +49,18 @@ const spend2: Spend = {
   denoms: denoms({ 50: 1 }),
 };
 
+const fund1: Fund = {
+  amount: 2000,
+  denoms: denoms({ 500: 4 }),
+};
+const fund2: Fund = {
+  amount: 100,
+  denoms: denoms({ 100: 1 }),
+};
+
 const vouchers = [voucherA, voucherB, voucherC];
 const spends = [spend1, spend2];
+const funds = [fund1, fund2];
 
 // -----------------------------------------------------------------------------
 
@@ -81,34 +94,70 @@ describe("sumSpends()", () => {
   });
 });
 
-describe("netBalance()", () => {
-  test("collected minus spent", () => {
-    expect(netBalance(vouchers, spends)).toBe(1800 - 250);
+describe("sumFunds()", () => {
+  test("sums every fund amount", () => {
+    expect(sumFunds(funds)).toBe(2100);
   });
-  test("can go negative if spends exceed collections", () => {
+  test("zero on empty", () => {
+    expect(sumFunds([])).toBe(0);
+  });
+});
+
+describe("sumFundDenoms()", () => {
+  test("sums fund denoms across the list", () => {
+    const d = sumFundDenoms(funds);
+    expect(d[500]).toBe(4);
+    expect(d[100]).toBe(1);
+    expect(d[200]).toBe(0);
+  });
+  test("zero map on empty", () => {
+    const d = sumFundDenoms([]);
+    for (const k of [500, 200, 100, 50, 20, 10, 1] as const) {
+      expect(d[k]).toBe(0);
+    }
+  });
+});
+
+describe("netBalance()", () => {
+  test("collected + funds − spent", () => {
+    expect(netBalance(vouchers, spends, funds)).toBe(1800 + 2100 - 250);
+  });
+  test("zero funds collapses to collected − spent", () => {
+    expect(netBalance(vouchers, spends, [])).toBe(1800 - 250);
+  });
+  test("can go negative if spends exceed collections + funds", () => {
     const v: Voucher[] = [];
     const s: Spend[] = [{ amount: 100, denoms: denoms({ 100: 1 }) }];
-    expect(netBalance(v, s)).toBe(-100);
+    expect(netBalance(v, s, [])).toBe(-100);
+  });
+  test("funds alone produce a positive balance", () => {
+    expect(netBalance([], [], funds)).toBe(2100);
   });
 });
 
 describe("denomInventory()", () => {
-  test("collected denoms minus spent denoms", () => {
-    const inv = denomInventory(vouchers, spends);
-    // 500: 2 + 1 (vouchers) - 0 (spends) = 3
-    expect(inv[500]).toBe(3);
-    // 100: 0 + 0 + 3 - 2 = 1
-    expect(inv[100]).toBe(1);
+  test("collected + fund denoms minus spent denoms", () => {
+    const inv = denomInventory(vouchers, spends, funds);
+    // 500: 2 + 1 (vouchers) + 4 (funds) - 0 (spends) = 7
+    expect(inv[500]).toBe(7);
+    // 100: 0 + 0 + 3 (vouchers) + 1 (funds) - 2 (spends) = 2
+    expect(inv[100]).toBe(2);
     // 50: 0 - 1 = -1
     expect(inv[50]).toBe(-1);
     // untouched denoms stay 0
     expect(inv[20]).toBe(0);
     expect(inv[1]).toBe(0);
   });
+  test("empty funds matches voucher-minus-spend behaviour", () => {
+    const inv = denomInventory(vouchers, spends, []);
+    expect(inv[500]).toBe(3);
+    expect(inv[100]).toBe(1);
+    expect(inv[50]).toBe(-1);
+  });
   test("surfaces negative inventory without clamping", () => {
     const v: Voucher[] = [];
     const s: Spend[] = [{ amount: 200, denoms: denoms({ 200: 1 }) }];
-    const inv = denomInventory(v, s);
+    const inv = denomInventory(v, s, []);
     expect(inv[200]).toBe(-1);
   });
 });

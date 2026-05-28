@@ -3,13 +3,7 @@ import { ChevronLeft, Plus, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { DateRangeSheet, DenomTally, Loader, VoucherRow } from "@/components";
 import { useAuth } from "@/hooks/useAuth";
-import {
-  deleteVoucher,
-  unverifyVoucher,
-  useRoute,
-  useVouchersByRoute,
-  verifyVoucher,
-} from "@/hooks/useData";
+import { useRoute, useVouchersByRoute } from "@/hooks/useData";
 import { useNavStore } from "@/hooks/useNavStore";
 import { denomInventory, routeTotals } from "@/lib/balances";
 import { dateRangePresets, formatDate } from "@/lib/date";
@@ -59,7 +53,7 @@ function TotalRow({ label, value, emphasis = false }: TotalRowProps) {
 }
 
 export default function RouteScreen() {
-  const { user, loading } = useAuth();
+  const { loading } = useAuth();
   const top = useNavStore((s) => s.stack[s.stack.length - 1]);
   const routeId =
     top && top.name === "route"
@@ -119,7 +113,7 @@ export default function RouteScreen() {
       verified: v.verified,
       routeId: v.routeId,
     }));
-    return denomInventory(vStubs, []);
+    return denomInventory(vStubs, [], []);
   }, [allVouchersInRoute]);
 
   const anyNegative = DENOMS.some((d) => inventory[d] < 0);
@@ -280,27 +274,25 @@ export default function RouteScreen() {
           </div>
         ) : (
           <div className="flex flex-col gap-2 pb-20">
+            {/* Route view is read-only — edit / delete / verify live in the
+                Records tab (Unverified segment). Tapping the body opens the
+                voucher detail screen so spends can be added/viewed. */}
             {vouchers.map((v) => (
               <VoucherRow
                 key={v.id}
                 voucher={v}
-                onEdit={() =>
-                  useNavStore
-                    .getState()
-                    .go({
-                      name: "voucher-editor",
-                      params: { routeId, voucherId: v.id },
-                    })
+                onRowTap={() =>
+                  useNavStore.getState().go({
+                    name: "voucher-editor",
+                    params: { routeId, voucherId: v.id },
+                  })
                 }
-                onToggleVerify={() => {
-                  if (!user) return;
-                  if (v.verified) void unverifyVoucher(user.uid, v.id);
-                  else void verifyVoucher(user.uid, v.id);
-                }}
-                onDelete={() => {
-                  if (!user) return;
-                  void deleteVoucher(user.uid, v.id);
-                }}
+                onAddSpend={() =>
+                  useNavStore.getState().go({
+                    name: "spend-editor",
+                    params: { routeId, voucherId: v.id },
+                  })
+                }
               />
             ))}
           </div>

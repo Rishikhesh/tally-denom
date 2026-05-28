@@ -4,14 +4,14 @@ import { useMemo, useState } from "react";
 import { Loader } from "@/components";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
-import { createRoute, useRoutes } from "@/hooks/useData";
+import { createLedger, useLedgers } from "@/hooks/useData";
 import { useNavStore } from "@/hooks/useNavStore";
 
 const NAME_MAX = 60;
 
-export default function EntryScreen() {
+export default function LedgerScreen() {
   const { user, loading } = useAuth();
-  const routes = useRoutes();
+  const ledgers = useLedgers();
 
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState("");
@@ -19,24 +19,19 @@ export default function EntryScreen() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
 
-  const sortedRoutes = useMemo(
-    () => [...routes].sort((a, b) => b.updatedAt - a.updatedAt),
-    [routes],
-  );
-
   const fuse = useMemo(
     () =>
       new Fuse(
-        sortedRoutes.map((r) => ({ item: r, name: r.name })),
+        ledgers.map((l) => ({ item: l, name: l.name })),
         { keys: ["name"], threshold: 0.4, ignoreLocation: true },
       ),
-    [sortedRoutes],
+    [ledgers],
   );
   const q = query.trim();
   const filtered = useMemo(() => {
-    if (!q) return sortedRoutes;
+    if (!q) return ledgers;
     return fuse.search(q).map((r) => r.item.item);
-  }, [q, sortedRoutes, fuse]);
+  }, [q, ledgers, fuse]);
 
   function startCreate() {
     setError(null);
@@ -63,19 +58,17 @@ export default function EntryScreen() {
     setBusy(true);
     setError(null);
     try {
-      const id = await createRoute(user.uid, { name });
+      const id = await createLedger(user.uid, { name });
       setDraft("");
       setCreating(false);
-      useNavStore.getState().go({ name: "route", params: { routeId: id } });
+      useNavStore
+        .getState()
+        .go({ name: "ledger-detail", params: { ledgerId: id } });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create route");
+      setError(e instanceof Error ? e.message : "Failed to create ledger");
     } finally {
       setBusy(false);
     }
-  }
-
-  function openRoute(routeId: string) {
-    useNavStore.getState().go({ name: "route", params: { routeId } });
   }
 
   if (loading) {
@@ -87,13 +80,16 @@ export default function EntryScreen() {
   }
 
   return (
-    <div className="relative flex h-full flex-col">
+    <div className="flex h-full flex-col">
       <header className="flex items-center justify-between gap-3 border-b border-[var(--color-border-strong)] bg-[var(--color-bg)] px-5 py-4">
-        <h1 className="font-display text-xl">Entry</h1>
+        <div className="flex flex-col">
+          <div className="eyebrow">02 / LEDGER</div>
+          <h1 className="font-display text-xl">Ledger</h1>
+        </div>
         <button
           type="button"
           onClick={startCreate}
-          aria-label="Add route"
+          aria-label="Add ledger"
           className="flex h-9 w-9 items-center justify-center border border-[var(--color-border-strong)] bg-[var(--color-accent)] text-[var(--color-accent-ink)] active:translate-y-px"
         >
           <Plus size={16} />
@@ -109,7 +105,7 @@ export default function EntryScreen() {
                 type="text"
                 maxLength={NAME_MAX}
                 value={draft}
-                placeholder="Route name"
+                placeholder="Ledger name"
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
@@ -122,14 +118,14 @@ export default function EntryScreen() {
                   }
                 }}
                 disabled={busy}
-                aria-label="New route name"
+                aria-label="New ledger name"
                 className="h-11 flex-1 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 text-sm text-[var(--color-text)] shadow-none focus-visible:ring-0"
               />
               <button
                 type="button"
                 onClick={() => void submitCreate()}
                 disabled={busy || draft.trim().length === 0}
-                aria-label="Save route"
+                aria-label="Save ledger"
                 className="flex h-11 w-11 items-center justify-center border border-l-0 border-[var(--color-border-strong)] bg-[var(--color-accent)] text-[var(--color-accent-ink)] disabled:opacity-40"
               >
                 <Check size={16} />
@@ -162,8 +158,8 @@ export default function EntryScreen() {
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search routes"
-            aria-label="Search routes"
+            placeholder="Search ledgers"
+            aria-label="Search ledgers"
             className="min-w-0 flex-1 bg-transparent text-sm text-[var(--color-text)] outline-none placeholder:text-[var(--color-text-muted)]"
           />
           {query && (
@@ -185,25 +181,29 @@ export default function EntryScreen() {
             <div className="eyebrow">00 / EMPTY</div>
             <p className="text-sm text-[var(--color-text-muted)]">
               {q
-                ? "No routes match the search."
-                : "No routes yet. Tap + to create one."}
+                ? "No ledgers match the search."
+                : "No ledgers yet. Tap + to create one."}
             </p>
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {filtered.map((r) => (
+            {filtered.map((l) => (
               <button
-                key={r.id}
+                key={l.id}
                 type="button"
-                onClick={() => openRoute(r.id)}
-                className="flex w-full items-center gap-3 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 py-3 text-left active:bg-[var(--color-surface)]"
+                onClick={() =>
+                  useNavStore
+                    .getState()
+                    .go({ name: "ledger-detail", params: { ledgerId: l.id } })
+                }
+                className="flex items-center gap-3 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 py-3 text-left active:bg-[var(--color-surface)]"
               >
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="truncate font-display text-base font-medium text-[var(--color-text)]">
-                    {r.name}
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="min-w-0 truncate font-display text-base font-medium text-[var(--color-text)]">
+                    {l.name}
                   </span>
                   <span className="font-mono text-xs tabular-nums text-[var(--color-text-muted)]">
-                    {r.voucherCount} voucher{r.voucherCount === 1 ? "" : "s"}
+                    {l.entryCount} entr{l.entryCount === 1 ? "y" : "ies"}
                   </span>
                 </div>
                 <ChevronRight
@@ -216,18 +216,6 @@ export default function EntryScreen() {
           </div>
         )}
       </div>
-
-      <button
-        type="button"
-        onClick={() =>
-          useNavStore.getState().go({ name: "fund-editor", params: {} })
-        }
-        aria-label="Add inflow"
-        className="absolute bottom-4 right-4 z-20 flex h-12 items-center gap-2 border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-4 text-sm font-bold uppercase tracking-[0.14em] text-[var(--color-accent-ink)] shadow-[0_8px_20px_rgba(0,0,0,0.28)] active:translate-y-px"
-      >
-        <Plus size={18} />
-        <span>Inflow</span>
-      </button>
     </div>
   );
 }

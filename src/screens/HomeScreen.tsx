@@ -1,8 +1,9 @@
-import { Moon, Plus, Settings, Sun } from "lucide-react";
+import { ArrowLeftRight, Bell, Moon, Settings, Sun } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
   ActivityRow,
   BalanceHero,
+  ExchangeDetailSheet,
   Loader,
 } from "@/components";
 import {
@@ -16,10 +17,16 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import {
   type Activity,
+  deleteExchange,
+  type Exchange,
   useActivity,
+  useAllExchanges,
+  useAllFunds,
+  useAllLedgerEntries,
   useAllSpends,
   useAllVouchers,
-  verifyVoucher,
+  useLedgers,
+  useRoutes,
 } from "@/hooks/useData";
 import { useNavStore } from "@/hooks/useNavStore";
 import { useTheme } from "@/hooks/useTheme";
@@ -27,48 +34,106 @@ import { signOut } from "@/lib/auth";
 import {
   denomInventory,
   netBalance,
+  sumFundDenoms,
+  sumFunds,
+  sumLedgerDenoms,
+  sumLedgerIn,
+  sumLedgerOut,
   sumSpendDenoms,
   sumSpends,
   sumUnverified,
   sumVerified,
   sumVoucherDenoms,
 } from "@/lib/balances";
+import { DENOMS, type DenomCounts, emptyDenoms } from "@/lib/denoms";
 
 export default function HomeScreen() {
   const { user, loading } = useAuth();
   const vouchers = useAllVouchers();
   const spends = useAllSpends();
+  const funds = useAllFunds();
+  const ledgerEntries = useAllLedgerEntries();
+  const exchanges = useAllExchanges();
+  const routes = useRoutes();
+  const ledgers = useLedgers();
   const recent = useActivity({ limit: 20 });
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [activeExchange, setActiveExchange] = useState<Exchange | null>(null);
   const { theme, toggleTheme } = useTheme();
 
-  const verified = sumVerified(vouchers);
+  // Direct funds count as verified inflows — they fold into the VERIFIED
+  // bucket for totals + denom maps. No separate Funds row in the hero.
+  const verified = sumVerified(vouchers) + sumFunds(funds);
   const unverified = sumUnverified(vouchers);
+  const ledger = sumLedgerIn(ledgerEntries) - sumLedgerOut(ledgerEntries);
   const spent = sumSpends(spends);
-  const net = netBalance(vouchers, spends);
+  // Exchanges contribute 0 to net by rule; no need to pass through.
+  const net = netBalance(vouchers, spends, funds, ledgerEntries);
 
   // Per-bucket denom maps for the hero.
-  const verifiedDenoms = useMemo(
-    () => sumVoucherDenoms(vouchers.filter((v) => v.verified)),
-    [vouchers],
-  );
+  const verifiedDenoms = useMemo(() => {
+    const out: DenomCounts = emptyDenoms();
+    const fromVouchers = sumVoucherDenoms(vouchers.filter((v) => v.verified));
+    const fromFunds = sumFundDenoms(funds);
+    for (const d of DENOMS) out[d] = fromVouchers[d] + fromFunds[d];
+    return out;
+  }, [vouchers, funds]);
   const unverifiedDenoms = useMemo(
     () => sumVoucherDenoms(vouchers.filter((v) => !v.verified)),
     [vouchers],
   );
+  const ledgerDenoms = useMemo(
+    () => sumLedgerDenoms(ledgerEntries),
+    [ledgerEntries],
+  );
   const spentDenoms = useMemo(() => sumSpendDenoms(spends), [spends]);
   const netDenoms = useMemo(
-    () => denomInventory(vouchers, spends),
-    [vouchers, spends],
+    () => denomInventory(vouchers, spends, funds, ledgerEntries, exchanges),
+    [vouchers, spends, funds, ledgerEntries, exchanges],
   );
 
-  // Voucher-id → verified flag for the row-level VERIFY CTA on `voucher.create`
-  // activities.
-  const voucherVerifiedMap = useMemo(() => {
-    const m = new Map<string, boolean>();
-    for (const v of vouchers) m.set(v.id, v.verified);
+  // Lookup maps used to surface a context label on each activity row.
+  const routeNameMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of routes) m.set(r.id, r.name);
+    return m;
+  }, [routes]);
+  const voucherCodeMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const v of vouchers) m.set(v.id, v.code);
     return m;
   }, [vouchers]);
+  const ledgerNameMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const l of ledgers) m.set(l.id, l.name);
+    return m;
+  }, [ledgers]);
+
+  function contextLabelFor(a: Activity): string | undefined {
+    if (a.type.startsWith("voucher.") || a.type.startsWith("route.")) {
+      return a.routeId ? routeNameMap.get(a.routeId) : undefined;
+    }
+    if (a.type.startsWith("spend.")) {
+      const vid =
+        typeof a.meta?.voucherId === "string"
+          ? (a.meta.voucherId as string)
+          : null;
+      const code = vid ? voucherCodeMap.get(vid) : undefined;
+      const route = a.routeId ? routeNameMap.get(a.routeId) : undefined;
+      const parts = [code ? `VCH #${code}` : null, route].filter(
+        (x): x is string => !!x,
+      );
+      return parts.length ? parts.join(" · ") : undefined;
+    }
+    if (a.type.startsWith("ledger")) {
+      const lid =
+        typeof a.meta?.ledgerId === "string"
+          ? (a.meta.ledgerId as string)
+          : null;
+      return lid ? ledgerNameMap.get(lid) : undefined;
+    }
+    return undefined;
+  }
 
   // Hide verify/unverify rows (state surfaced via the VERIFY button) plus
   // route.create / route.delete (not interesting on the home recent strip).
@@ -103,8 +168,34 @@ export default function HomeScreen() {
       nav.go({ name: "spend-editor", params: { spendId: activity.refId } });
       return;
     }
+    if (activity.type.startsWith("fund.")) {
+      nav.go({ name: "fund-editor", params: { fundId: activity.refId } });
+      return;
+    }
     if (activity.type.startsWith("route.") && activity.routeId) {
       nav.go({ name: "route", params: { routeId: activity.routeId } });
+      return;
+    }
+    if (activity.type === "ledger.create") {
+      nav.go({ name: "ledger-detail", params: { ledgerId: activity.refId } });
+      return;
+    }
+    if (activity.type.startsWith("ledger-entry.")) {
+      const ledgerId =
+        typeof activity.meta?.ledgerId === "string"
+          ? (activity.meta.ledgerId as string)
+          : null;
+      if (ledgerId) {
+        nav.go({
+          name: "ledger-entry-editor",
+          params: { ledgerId, entryId: activity.refId },
+        });
+      }
+      return;
+    }
+    if (activity.type === "exchange.create") {
+      const ex = exchanges.find((x) => x.id === activity.refId) ?? null;
+      if (ex) setActiveExchange(ex);
     }
   }
 
@@ -128,24 +219,38 @@ export default function HomeScreen() {
           </span>
           <h1 className="font-display text-xl">Tally</h1>
         </div>
-        <button
-          type="button"
-          onClick={() => setSettingsOpen(true)}
-          aria-label="Settings"
-          className="flex h-9 w-9 items-center justify-center border border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)] active:bg-[var(--color-surface)]"
-        >
-          <Settings size={16} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() =>
+              useNavStore.getState().go({ name: "activity" })
+            }
+            aria-label="Activity"
+            className="flex h-9 w-9 items-center justify-center border border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)] active:bg-[var(--color-surface)]"
+          >
+            <Bell size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            aria-label="Settings"
+            className="flex h-9 w-9 items-center justify-center border border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)] active:bg-[var(--color-surface)]"
+          >
+            <Settings size={16} />
+          </button>
+        </div>
       </header>
 
       <div className="flex-1 overflow-y-auto">
         <BalanceHero
           verified={verified}
           unverified={unverified}
+          ledger={ledger}
           spent={spent}
           net={net}
           verifiedDenoms={verifiedDenoms}
           unverifiedDenoms={unverifiedDenoms}
+          ledgerDenoms={ledgerDenoms}
           spentDenoms={spentDenoms}
           netDenoms={netDenoms}
         />
@@ -155,7 +260,9 @@ export default function HomeScreen() {
             <div className="eyebrow">02 / RECENT</div>
             <button
               type="button"
-              onClick={() => useNavStore.getState().setTab("activity")}
+              onClick={() =>
+                useNavStore.getState().go({ name: "activity" })
+              }
               className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--color-text-muted)] active:text-[var(--color-text)]"
             >
               View all →
@@ -171,24 +278,14 @@ export default function HomeScreen() {
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              {visibleRecent.map((a) => {
-                const isCreate = a.type === "voucher.create";
-                const isUnverified =
-                  isCreate && voucherVerifiedMap.get(a.refId) === false;
-                return (
-                  <ActivityRow
-                    key={a.id}
-                    activity={a}
-                    onTap={() => jumpToActivity(a)}
-                    unverified={isUnverified}
-                    onVerify={
-                      isUnverified && user
-                        ? () => void verifyVoucher(user.uid, a.refId)
-                        : undefined
-                    }
-                  />
-                );
-              })}
+              {visibleRecent.map((a) => (
+                <ActivityRow
+                  key={a.id}
+                  activity={a}
+                  onTap={() => jumpToActivity(a)}
+                  contextLabel={contextLabelFor(a)}
+                />
+              ))}
             </div>
           )}
         </section>
@@ -197,13 +294,15 @@ export default function HomeScreen() {
       <button
         type="button"
         onClick={() =>
-          useNavStore.getState().go({ name: "spend-editor", params: {} })
+          useNavStore
+            .getState()
+            .go({ name: "exchange-editor", params: {} })
         }
-        aria-label="Add spend"
+        aria-label="Exchange"
         className="absolute bottom-4 right-4 z-20 flex h-12 items-center gap-2 border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-4 text-sm font-bold uppercase tracking-[0.14em] text-[var(--color-accent-ink)] shadow-[0_8px_20px_rgba(0,0,0,0.28)] active:translate-y-px"
       >
-        <Plus size={18} />
-        <span>Spend</span>
+        <ArrowLeftRight size={18} />
+        <span>Exchange</span>
       </button>
 
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
@@ -254,6 +353,20 @@ export default function HomeScreen() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {activeExchange && (
+        <ExchangeDetailSheet
+          exchange={activeExchange}
+          onClose={() => setActiveExchange(null)}
+          onDelete={
+            user
+              ? () => {
+                  void deleteExchange(user.uid, activeExchange.id);
+                }
+              : undefined
+          }
+        />
+      )}
     </div>
   );
 }

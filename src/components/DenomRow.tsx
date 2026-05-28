@@ -7,6 +7,12 @@ interface Props {
   denom: number;
   count: number;
   onChange: (next: number) => void;
+  /**
+   * Optional upper bound. When supplied, the `+` button disables once the
+   * count reaches `max`, the input clamps on commit, and an `n / max` hint
+   * is shown next to the row.
+   */
+  max?: number;
 }
 
 function sanitize(raw: string): number {
@@ -16,8 +22,15 @@ function sanitize(raw: string): number {
   return parsed;
 }
 
-export function DenomRow({ denom, count, onChange }: Props) {
+export function DenomRow({ denom, count, onChange, max }: Props) {
   const subtotal = denom * count;
+  const hasCap = typeof max === "number";
+  const atMax = hasCap && count >= (max as number);
+
+  function clamp(n: number): number {
+    if (!hasCap) return n;
+    return Math.min(n, max as number);
+  }
 
   // Local string buffer so we can show "" without breaking controlled-ness.
   // While focused, the buffer is the source of truth for the displayed text;
@@ -35,7 +48,7 @@ export function DenomRow({ denom, count, onChange }: Props) {
   function step(delta: number) {
     const next = count + delta;
     if (next < 0) return;
-    onChange(next);
+    onChange(clamp(next));
   }
 
   function handleInput(e: ChangeEvent<HTMLInputElement>) {
@@ -43,7 +56,7 @@ export function DenomRow({ denom, count, onChange }: Props) {
     // some browsers; normalise on the way in.
     const cleaned = e.target.value.replace(/[^\d]/g, "");
     setDisplayed(cleaned);
-    onChange(sanitize(cleaned));
+    onChange(clamp(sanitize(cleaned)));
   }
 
   function handleFocus() {
@@ -57,7 +70,7 @@ export function DenomRow({ denom, count, onChange }: Props) {
   function handleBlur(e: FocusEvent<HTMLInputElement>) {
     focusedRef.current = false;
     const cleaned = e.target.value.replace(/[^\d]/g, "");
-    const next = sanitize(cleaned);
+    const next = clamp(sanitize(cleaned));
     setDisplayed(String(next));
     onChange(next);
   }
@@ -98,16 +111,27 @@ export function DenomRow({ denom, count, onChange }: Props) {
         <button
           type="button"
           onClick={() => step(1)}
+          disabled={atMax}
           aria-label={`Increase ₹${denom} count`}
-          className="flex h-9 w-9 items-center justify-center border border-[var(--color-border-strong)] bg-[var(--color-accent)] text-[var(--color-accent-ink)] transition-opacity active:opacity-80"
+          className={cn(
+            "flex h-9 w-9 items-center justify-center border border-[var(--color-border-strong)] bg-[var(--color-accent)] text-[var(--color-accent-ink)] transition-opacity active:opacity-80",
+            atMax && "opacity-30",
+          )}
         >
           <Plus size={16} />
         </button>
       </div>
 
-      <span className="ml-auto font-mono text-sm tabular-nums text-[var(--color-text-muted)]">
-        ₹{subtotal.toLocaleString("en-IN")}
-      </span>
+      <div className="ml-auto flex flex-col items-end gap-0.5">
+        <span className="font-mono text-sm tabular-nums text-[var(--color-text-muted)]">
+          ₹{subtotal.toLocaleString("en-IN")}
+        </span>
+        {hasCap && (
+          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-muted)]">
+            {count} / {max}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

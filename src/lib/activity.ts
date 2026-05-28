@@ -8,7 +8,18 @@ export type ActivityType =
   | "voucher.delete"
   | "spend.create"
   | "spend.edit"
-  | "spend.delete";
+  | "spend.delete"
+  | "fund.create"
+  | "fund.edit"
+  | "fund.delete"
+  | "ledger.create"
+  | "ledger.delete"
+  | "ledger-entry.in"
+  | "ledger-entry.out"
+  | "ledger-entry.edit"
+  | "ledger-entry.delete"
+  | "exchange.create"
+  | "exchange.delete";
 
 export interface BuildActivityInput {
   type: ActivityType;

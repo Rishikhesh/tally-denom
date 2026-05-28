@@ -17,10 +17,26 @@ const ActivityScreen = lazy(() => import("@/screens/ActivityScreen"));
 const RecordsScreen = lazy(() => import("@/screens/RecordsScreen"));
 const RouteScreen = lazy(() => import("@/screens/RouteScreen"));
 const VoucherEditorScreen = lazy(() => import("@/screens/VoucherEditorScreen"));
+const VoucherDetailScreen = lazy(() => import("@/screens/VoucherDetailScreen"));
 const SpendEditorScreen = lazy(() => import("@/screens/SpendEditorScreen"));
+const FundEditorScreen = lazy(() => import("@/screens/FundEditorScreen"));
+const LedgerScreen = lazy(() => import("@/screens/LedgerScreen"));
+const LedgerDetailScreen = lazy(() => import("@/screens/LedgerDetailScreen"));
+const LedgerEntryEditorScreen = lazy(
+  () => import("@/screens/LedgerEntryEditorScreen"),
+);
+const ExchangeEditorScreen = lazy(
+  () => import("@/screens/ExchangeEditorScreen"),
+);
 const SignInScreen = lazy(() => import("@/screens/SignInScreen"));
 
-const FULLSCREEN_STACK_NAMES = new Set(["voucher-editor", "spend-editor"]);
+const FULLSCREEN_STACK_NAMES = new Set([
+  "voucher-editor",
+  "spend-editor",
+  "fund-editor",
+  "ledger-entry-editor",
+  "exchange-editor",
+]);
 
 function showTabBar(top: NavEntry | undefined): boolean {
   if (!top) return true;
@@ -75,8 +91,20 @@ export default function App() {
           return <RouteScreen />;
         case "voucher-editor":
           return <VoucherEditorScreen />;
+        case "voucher-detail":
+          return <VoucherDetailScreen />;
         case "spend-editor":
           return <SpendEditorScreen />;
+        case "fund-editor":
+          return <FundEditorScreen />;
+        case "ledger-detail":
+          return <LedgerDetailScreen />;
+        case "ledger-entry-editor":
+          return <LedgerEntryEditorScreen />;
+        case "exchange-editor":
+          return <ExchangeEditorScreen />;
+        case "activity":
+          return <ActivityScreen />;
         default:
           break;
       }
@@ -86,8 +114,8 @@ export default function App() {
         return <HomeScreen />;
       case "entry":
         return <EntryScreen />;
-      case "activity":
-        return <ActivityScreen />;
+      case "ledger":
+        return <LedgerScreen />;
       case "records":
         return <RecordsScreen />;
       default:

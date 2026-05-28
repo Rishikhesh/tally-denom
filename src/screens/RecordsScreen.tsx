@@ -1,12 +1,23 @@
 import Fuse from "fuse.js";
-import { Search, X } from "lucide-react";
+import { ArrowLeftRight, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Loader, SegControl, SpendRow, VoucherRow } from "@/components";
+import {
+  ExchangeDetailSheet,
+  FundRow,
+  Loader,
+  SegControl,
+  SpendRow,
+  VoucherRow,
+} from "@/components";
 import { useAuth } from "@/hooks/useAuth";
 import {
+  deleteExchange,
+  deleteFund,
   deleteSpend,
   deleteVoucher,
-  unverifyVoucher,
+  type Exchange,
+  useAllExchanges,
+  useAllFunds,
   useAllSpends,
   useAllVouchers,
   verifyVoucher,
@@ -14,7 +25,7 @@ import {
 import { useNavStore } from "@/hooks/useNavStore";
 import { formatDate } from "@/lib/date";
 
-type SegId = "verified" | "unverified" | "spends";
+type SegId = "verified" | "unverified" | "spends" | "funds" | "exchanges";
 
 function formatINR(n: number): string {
   return n.toLocaleString("en-IN", {
@@ -27,8 +38,13 @@ export default function RecordsScreen() {
   const { user, loading } = useAuth();
   const vouchers = useAllVouchers();
   const spends = useAllSpends();
-  const [seg, setSeg] = useState<SegId>("verified");
+  const funds = useAllFunds();
+  const exchanges = useAllExchanges();
+  // Default to Unverified — that's where the user has actionable work
+  // (verify, edit, delete). Verified segment is read-only history.
+  const [seg, setSeg] = useState<SegId>("unverified");
   const [query, setQuery] = useState("");
+  const [activeExchange, setActiveExchange] = useState<Exchange | null>(null);
 
   const { verified, unverified } = useMemo(() => {
     const v = [] as typeof vouchers;
@@ -82,6 +98,24 @@ export default function RecordsScreen() {
       ),
     [spends],
   );
+  const fuseFunds = useMemo(
+    () =>
+      new Fuse(
+        funds.map((f) => ({
+          item: f,
+          title: f.title,
+          remark: f.remark ?? "",
+          date: formatDate(f.txDate),
+          amount: String(f.amount),
+        })),
+        {
+          keys: ["title", "remark", "date", "amount"],
+          threshold: 0.4,
+          ignoreLocation: true,
+        },
+      ),
+    [funds],
+  );
 
   const q = query.trim();
 
@@ -97,6 +131,27 @@ export default function RecordsScreen() {
     if (!q) return spends;
     return fuseSpends.search(q).map((r) => r.item.item);
   }, [q, spends, fuseSpends]);
+  const filteredFunds = useMemo(() => {
+    if (!q) return funds;
+    return fuseFunds.search(q).map((r) => r.item.item);
+  }, [q, funds, fuseFunds]);
+
+  const fuseExchanges = useMemo(
+    () =>
+      new Fuse(
+        exchanges.map((x) => ({
+          item: x,
+          date: formatDate(x.txDate),
+          amount: String(x.amount),
+        })),
+        { keys: ["date", "amount"], threshold: 0.4, ignoreLocation: true },
+      ),
+    [exchanges],
+  );
+  const filteredExchanges = useMemo(() => {
+    if (!q) return exchanges;
+    return fuseExchanges.search(q).map((r) => r.item.item);
+  }, [q, exchanges, fuseExchanges]);
 
   const verifiedTotal = useMemo(
     () => filteredVerified.reduce((a, v) => a + v.total, 0),
@@ -110,6 +165,14 @@ export default function RecordsScreen() {
     () => filteredSpends.reduce((a, s) => a + s.amount, 0),
     [filteredSpends],
   );
+  const fundsTotal = useMemo(
+    () => filteredFunds.reduce((a, f) => a + f.amount, 0),
+    [filteredFunds],
+  );
+  const exchangesTotal = useMemo(
+    () => filteredExchanges.reduce((a, x) => a + x.amount, 0),
+    [filteredExchanges],
+  );
 
   if (loading) {
     return (
@@ -122,7 +185,11 @@ export default function RecordsScreen() {
   const placeholder =
     seg === "spends"
       ? "Search note, date, amount"
-      : "Search code, date, total";
+      : seg === "funds"
+        ? "Search title, remark, date, amount"
+        : seg === "exchanges"
+          ? "Search date, amount"
+          : "Search code, date, total";
 
   return (
     <div className="flex h-full flex-col">
@@ -134,9 +201,11 @@ export default function RecordsScreen() {
       <div className="border-b border-[var(--color-border)] px-5 py-3">
         <SegControl
           options={[
-            { id: "verified", label: "Verified" },
             { id: "unverified", label: "Unverified" },
+            { id: "verified", label: "Verified" },
             { id: "spends", label: "Spends" },
+            { id: "funds", label: "Inflow" },
+            { id: "exchanges", label: "Exchange" },
           ]}
           value={seg}
           onChange={(v) => {
@@ -215,6 +284,90 @@ export default function RecordsScreen() {
               </div>
             )}
           </section>
+        ) : seg === "funds" ? (
+          <section className="flex flex-col gap-3">
+            <div className="flex items-baseline justify-between gap-2 border-b border-[var(--color-border)] pb-2">
+              <span className="font-mono text-xs uppercase tracking-[0.16em] tabular-nums text-[var(--color-text-muted)]">
+                {filteredFunds.length} inflow
+                {filteredFunds.length === 1 ? "" : "s"}
+              </span>
+              <span className="font-mono text-xs tabular-nums text-[var(--color-text-muted)]">
+                ₹{formatINR(fundsTotal)} added
+              </span>
+            </div>
+
+            {filteredFunds.length === 0 ? (
+              <div className="flex flex-col items-center gap-1 py-8">
+                <div className="eyebrow">00 / EMPTY</div>
+                <p className="text-sm text-[var(--color-text-muted)]">
+                  {q ? "No inflows match." : "No inflows yet."}
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {filteredFunds.map((f) => (
+                  <FundRow
+                    key={f.id}
+                    fund={f}
+                    onEdit={() =>
+                      useNavStore.getState().go({
+                        name: "fund-editor",
+                        params: { fundId: f.id },
+                      })
+                    }
+                    onDelete={() => {
+                      if (!user) return;
+                      void deleteFund(user.uid, f.id);
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        ) : seg === "exchanges" ? (
+          <section className="flex flex-col gap-3">
+            <div className="flex items-baseline justify-between gap-2 border-b border-[var(--color-border)] pb-2">
+              <span className="font-mono text-xs uppercase tracking-[0.16em] tabular-nums text-[var(--color-text-muted)]">
+                {filteredExchanges.length} exchange
+                {filteredExchanges.length === 1 ? "" : "s"}
+              </span>
+              <span className="font-mono text-xs tabular-nums text-[var(--color-text-muted)]">
+                ₹{formatINR(exchangesTotal)} swapped
+              </span>
+            </div>
+
+            {filteredExchanges.length === 0 ? (
+              <div className="flex flex-col items-center gap-1 py-8">
+                <div className="eyebrow">00 / EMPTY</div>
+                <p className="text-sm text-[var(--color-text-muted)]">
+                  {q ? "No exchanges match." : "No exchanges yet."}
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {filteredExchanges.map((x) => (
+                  <button
+                    key={x.id}
+                    type="button"
+                    onClick={() => setActiveExchange(x)}
+                    className="flex items-center gap-3 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 py-2 text-left active:bg-[var(--color-surface)]"
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center border border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)]">
+                      <ArrowLeftRight size={16} />
+                    </span>
+                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="truncate font-display text-base font-medium text-[var(--color-text)]">
+                        ₹{formatINR(x.amount)} exchanged
+                      </span>
+                      <span className="font-mono text-xs tabular-nums text-[var(--color-text-muted)]">
+                        {formatDate(x.txDate)}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
         ) : (
           (() => {
             const list =
@@ -244,28 +397,35 @@ export default function RecordsScreen() {
                   </div>
                 ) : (
                   <div className="flex flex-col gap-2">
-                    {list.map((v) => (
-                      <VoucherRow
-                        key={v.id}
-                        voucher={v}
-                        onEdit={() =>
-                          useNavStore.getState().go({
-                            name: "voucher-editor",
-                            params: { routeId: v.routeId, voucherId: v.id },
-                          })
-                        }
-                        onToggleVerify={() => {
-                          if (!user) return;
-                          if (v.verified)
-                            void unverifyVoucher(user.uid, v.id);
-                          else void verifyVoucher(user.uid, v.id);
-                        }}
-                        onDelete={() => {
-                          if (!user) return;
-                          void deleteVoucher(user.uid, v.id);
-                        }}
-                      />
-                    ))}
+                    {list.map((v) =>
+                      v.verified ? (
+                        // Verified rows are immutable history — show, no edit /
+                        // delete / unverify. VoucherRow auto-locks too.
+                        <VoucherRow key={v.id} voucher={v} readOnly />
+                      ) : (
+                        <VoucherRow
+                          key={v.id}
+                          voucher={v}
+                          onEdit={() =>
+                            useNavStore.getState().go({
+                              name: "voucher-editor",
+                              params: {
+                                routeId: v.routeId,
+                                voucherId: v.id,
+                              },
+                            })
+                          }
+                          onToggleVerify={() => {
+                            if (!user) return;
+                            void verifyVoucher(user.uid, v.id);
+                          }}
+                          onDelete={() => {
+                            if (!user) return;
+                            void deleteVoucher(user.uid, v.id);
+                          }}
+                        />
+                      ),
+                    )}
                   </div>
                 )}
               </section>
@@ -273,6 +433,20 @@ export default function RecordsScreen() {
           })()
         )}
       </div>
+
+      {activeExchange && (
+        <ExchangeDetailSheet
+          exchange={activeExchange}
+          onClose={() => setActiveExchange(null)}
+          onDelete={
+            user
+              ? () => {
+                  void deleteExchange(user.uid, activeExchange.id);
+                }
+              : undefined
+          }
+        />
+      )}
     </div>
   );
 }
