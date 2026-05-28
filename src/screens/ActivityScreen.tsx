@@ -99,7 +99,7 @@ export default function ActivityScreen() {
 
   if (loading) {
     return (
-      <div className="flex flex-1 items-center justify-center">
+      <div className="flex h-full items-center justify-center">
         <Loader />
       </div>
     );
@@ -115,16 +115,14 @@ export default function ActivityScreen() {
   ];
 
   return (
-    <div
-      className="flex flex-1 flex-col overflow-y-auto"
-      style={{ paddingBottom: "calc(var(--tab-bar-height) + var(--tab-safe-bottom))" }}
-    >
-      <header className="sticky top-0 z-10 border-b border-[var(--color-border-strong)] bg-[var(--color-bg)] px-5 py-4">
+    <div className="flex h-full flex-col">
+      <header className="border-b border-[var(--color-border-strong)] bg-[var(--color-bg)] px-5 py-4">
         <div className="eyebrow">02 / ACTIVITY</div>
         <h1 className="font-display text-xl">Activity</h1>
       </header>
 
-      <section className="flex flex-col gap-2 px-5 py-3">
+      <div className="flex-1 overflow-y-auto">
+        <section className="flex flex-col gap-2 px-5 py-3">
         <span className="eyebrow">TYPE</span>
         <SegControl
           options={[
@@ -188,6 +186,7 @@ export default function ActivityScreen() {
           ))
         )}
       </section>
+      </div>
     </div>
   );
 }

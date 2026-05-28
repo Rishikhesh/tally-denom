@@ -1,4 +1,4 @@
-import { Settings } from "lucide-react";
+import { Moon, Plus, Settings, Sun } from "lucide-react";
 import { useState } from "react";
 import {
   ActivityRow,
@@ -21,6 +21,7 @@ import {
   useAllVouchers,
 } from "@/hooks/useData";
 import { useNavStore } from "@/hooks/useNavStore";
+import { useTheme } from "@/hooks/useTheme";
 import { signOut } from "@/lib/auth";
 import {
   netBalance,
@@ -35,6 +36,7 @@ export default function HomeScreen() {
   const spends = useAllSpends();
   const recent = useActivity({ limit: 5 });
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const { theme, toggleTheme } = useTheme();
 
   const verified = sumVerified(vouchers);
   const unverified = sumUnverified(vouchers);
@@ -68,18 +70,15 @@ export default function HomeScreen() {
 
   if (loading) {
     return (
-      <div className="flex flex-1 items-center justify-center">
+      <div className="flex h-full items-center justify-center">
         <Loader />
       </div>
     );
   }
 
   return (
-    <div
-      className="flex flex-1 flex-col overflow-y-auto"
-      style={{ paddingBottom: "calc(var(--tab-bar-height) + var(--tab-safe-bottom))" }}
-    >
-      <header className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--color-border-strong)] bg-[var(--color-bg)] px-5 py-4">
+    <div className="relative flex h-full flex-col">
+      <header className="flex items-center justify-between border-b border-[var(--color-border-strong)] bg-[var(--color-bg)] px-5 py-4">
         <div className="flex items-center gap-3">
           <span
             aria-hidden
@@ -99,44 +98,58 @@ export default function HomeScreen() {
         </button>
       </header>
 
-      <BalanceHero
-        verified={verified}
-        unverified={unverified}
-        spent={spent}
-        net={net}
-      />
+      <div className="flex-1 overflow-y-auto">
+        <BalanceHero
+          verified={verified}
+          unverified={unverified}
+          spent={spent}
+          net={net}
+        />
 
-      <section className="flex flex-col gap-3 px-5 py-3">
-        <div className="flex items-center justify-between">
-          <div className="eyebrow">02 / RECENT</div>
-          <button
-            type="button"
-            onClick={() => useNavStore.getState().setTab("activity")}
-            className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--color-text-muted)] active:text-[var(--color-text)]"
-          >
-            View all →
-          </button>
-        </div>
+        <section className="flex flex-col gap-3 px-5 py-3 pb-6">
+          <div className="flex items-center justify-between">
+            <div className="eyebrow">02 / RECENT</div>
+            <button
+              type="button"
+              onClick={() => useNavStore.getState().setTab("activity")}
+              className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--color-text-muted)] active:text-[var(--color-text)]"
+            >
+              View all →
+            </button>
+          </div>
 
-        {recent.length === 0 ? (
-          <div className="flex flex-col items-center gap-1 py-6">
-            <div className="eyebrow">00 / EMPTY</div>
-            <p className="text-sm text-[var(--color-text-muted)]">
-              No activity yet. Add a voucher to get started.
-            </p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {recent.map((a) => (
-              <ActivityRow
-                key={a.id}
-                activity={a}
-                onTap={() => jumpToActivity(a)}
-              />
-            ))}
-          </div>
-        )}
-      </section>
+          {recent.length === 0 ? (
+            <div className="flex flex-col items-center gap-1 py-6">
+              <div className="eyebrow">00 / EMPTY</div>
+              <p className="text-sm text-[var(--color-text-muted)]">
+                No activity yet. Add a voucher to get started.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {recent.map((a) => (
+                <ActivityRow
+                  key={a.id}
+                  activity={a}
+                  onTap={() => jumpToActivity(a)}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+
+      <button
+        type="button"
+        onClick={() =>
+          useNavStore.getState().go({ name: "spend-editor", params: {} })
+        }
+        aria-label="Add spend"
+        className="absolute bottom-4 right-4 z-20 flex h-12 items-center gap-2 border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-4 text-sm font-bold uppercase tracking-[0.14em] text-[var(--color-accent-ink)] shadow-[0_8px_20px_rgba(0,0,0,0.28)] active:translate-y-px"
+      >
+        <Plus size={18} />
+        <span>Spend</span>
+      </button>
 
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
         <DialogContent
@@ -149,6 +162,22 @@ export default function HomeScreen() {
               Signed in. Tap below to sign out.
             </DialogDescription>
           </DialogHeader>
+          <div className="flex items-center justify-between border-t border-b border-[var(--color-border)] py-3">
+            <div>
+              <div className="eyebrow">THEME</div>
+              <div className="text-sm">
+                {theme === "dark" ? "Dark" : "Light"}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={toggleTheme}
+              aria-label="Toggle theme"
+              className="flex h-10 w-10 items-center justify-center border border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)] active:bg-[var(--color-surface)]"
+            >
+              {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
+          </div>
           <DialogFooter>
             <button
               type="button"

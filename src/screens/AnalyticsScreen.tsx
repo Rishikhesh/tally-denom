@@ -90,7 +90,7 @@ export default function AnalyticsScreen() {
 
   if (loading) {
     return (
-      <div className="flex flex-1 items-center justify-center">
+      <div className="flex h-full items-center justify-center">
         <Loader />
       </div>
     );
@@ -128,14 +128,12 @@ export default function AnalyticsScreen() {
   const empty30 = v30.length === 0 && s30.length === 0;
 
   return (
-    <div
-      className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 pt-4"
-      style={{ paddingBottom: "calc(var(--tab-bar-height) + var(--tab-safe-bottom) + 16px)" }}
-    >
-      <header className="px-1">
-        <div className="eyebrow">02 / ANALYTICS</div>
-        <h1 className="font-display text-xl">Analytics</h1>
-      </header>
+    <div className="flex h-full flex-col">
+      <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 pt-4 pb-6">
+        <header className="px-1">
+          <div className="eyebrow">02 / ANALYTICS</div>
+          <h1 className="font-display text-xl">Analytics</h1>
+        </header>
 
       <Card title="01 / VERIFIED vs UNVERIFIED (30d)">
         {v30.length === 0 ? (
@@ -309,6 +307,7 @@ export default function AnalyticsScreen() {
           </div>
         )}
       </Card>
+      </div>
     </div>
   );
 }

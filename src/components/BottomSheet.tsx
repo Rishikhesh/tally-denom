@@ -32,7 +32,7 @@ export function BottomSheet({
     <>
       <button
         type="button"
-        className="absolute inset-0 z-50 border-0 bg-black/40 p-0 animate-fade-up touch-none overscroll-none"
+        className="absolute inset-0 z-50 border-0 bg-black/55 backdrop-blur-md p-0 animate-fade-up touch-none overscroll-none"
         aria-label="Close"
         onClick={onClose}
         onTouchMove={(e) => e.preventDefault()}
@@ -40,7 +40,7 @@ export function BottomSheet({
         onWheel={(e) => e.preventDefault()}
       />
       <div
-        className="absolute inset-x-0 bottom-0 z-[51] flex max-h-[88%] flex-col overflow-hidden overscroll-contain border-t border-[var(--color-border-strong)] bg-[var(--color-bg)] animate-sheet-up"
+        className="absolute inset-x-0 bottom-0 z-[51] flex max-h-[88%] flex-col overflow-hidden overscroll-contain border-t border-[var(--color-border-strong)] bg-[var(--color-bg)] animate-sheet-up shadow-[0_-28px_72px_rgba(0,0,0,0.45),0_-8px_20px_rgba(0,0,0,0.25)]"
         style={
           fixedHeight
             ? {

@@ -1,18 +1,10 @@
-import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
+import { ChevronLeft, Plus, X } from "lucide-react";
 import { useMemo, useState } from "react";
-import {
-  DateRangeSheet,
-  DenomTally,
-  Loader,
-  SpendRow,
-  VoucherRow,
-} from "@/components";
+import { DateRangeSheet, DenomTally, Loader, VoucherRow } from "@/components";
 import { useAuth } from "@/hooks/useAuth";
 import {
-  deleteSpend,
   deleteVoucher,
   unverifyVoucher,
-  useAllSpends,
   useRoute,
   useVouchersByRoute,
   verifyVoucher,
@@ -36,6 +28,35 @@ interface Range {
   to?: string;
 }
 
+interface TotalRowProps {
+  label: string;
+  value: number;
+  emphasis?: boolean;
+}
+
+function TotalRow({ label, value, emphasis = false }: TotalRowProps) {
+  return (
+    <div
+      className={
+        emphasis
+          ? "flex items-baseline justify-between gap-3 border-t border-[var(--color-border-strong)] pt-2"
+          : "flex items-baseline justify-between gap-3 border-b border-[var(--color-border)] py-2 last:border-b-0"
+      }
+    >
+      <span className="eyebrow shrink-0">{label}</span>
+      <span
+        className={
+          emphasis
+            ? "min-w-0 truncate text-right font-mono text-base font-semibold tabular-nums text-[var(--color-text)]"
+            : "min-w-0 truncate text-right font-mono text-sm tabular-nums text-[var(--color-text)]"
+        }
+      >
+        ₹ {formatINR(value)}
+      </span>
+    </div>
+  );
+}
+
 export default function RouteScreen() {
   const { user, loading } = useAuth();
   const top = useNavStore((s) => s.stack[s.stack.length - 1]);
@@ -47,11 +68,9 @@ export default function RouteScreen() {
   const [chip, setChip] = useState<ChipId>("all");
   const [range, setRange] = useState<Range>({});
   const [rangeSheetOpen, setRangeSheetOpen] = useState(false);
-  const [spendsOpen, setSpendsOpen] = useState(true);
 
   const route = useRoute(routeId);
   const vouchers = useVouchersByRoute(routeId, range);
-  const spends = useAllSpends(range);
 
   const totals = useMemo(() => {
     if (!routeId) {
@@ -66,11 +85,8 @@ export default function RouteScreen() {
     return routeTotals(stub, routeId);
   }, [vouchers, routeId]);
 
-  const spentInRange = useMemo(
-    () => spends.reduce((acc, s) => acc + s.amount, 0),
-    [spends],
-  );
-
+  // Voucher-only inventory. Spends are global, not subtracted at the route
+  // level.
   const inventory = useMemo(() => {
     const vStubs = vouchers.map((v) => ({
       total: v.total,
@@ -78,9 +94,8 @@ export default function RouteScreen() {
       verified: v.verified,
       routeId: v.routeId,
     }));
-    const sStubs = spends.map((s) => ({ amount: s.amount, denoms: s.denoms }));
-    return denomInventory(vStubs, sStubs);
-  }, [vouchers, spends]);
+    return denomInventory(vStubs, []);
+  }, [vouchers]);
 
   const anyNegative = DENOMS.some((d) => inventory[d] < 0);
 
@@ -103,13 +118,14 @@ export default function RouteScreen() {
   }
 
   function goBack() {
-    useNavStore.getState().back();
+    // Only call history.back(). The popstate listener inside useNavStore
+    // pops the in-app stack — calling both would double-pop.
     if (typeof window !== "undefined") window.history.back();
   }
 
   if (loading || !routeId) {
     return (
-      <div className="flex flex-1 items-center justify-center">
+      <div className="flex h-full items-center justify-center">
         <Loader />
       </div>
     );
@@ -124,12 +140,9 @@ export default function RouteScreen() {
   ];
 
   return (
-    <div className="flex flex-col">
-      {/* App's outer wrapper is the scroll container; this screen just stacks
-          its sections. The Add bar at the bottom uses position: sticky against
-          the App wrapper so it pins to the top of the TabBar regardless of
-          how short the content is. */}
-      <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 py-3">
+    <div className="relative flex h-full flex-col">
+      {/* Header — fixed */}
+      <header className="flex items-center gap-3 border-b border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 py-3">
         <button
           type="button"
           onClick={goBack}
@@ -149,91 +162,72 @@ export default function RouteScreen() {
         </div>
       </header>
 
-      <section className="flex flex-col gap-3 px-5 py-4">
-        <div className="eyebrow">01 / FILTER</div>
-        <div className="flex flex-wrap gap-2">
-          {chips.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => applyChip(c.id)}
-              className={
-                chip === c.id
-                  ? "border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-3 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-[var(--color-accent-ink)]"
-                  : "border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-[var(--color-text)]"
-              }
-            >
-              {c.label}
-            </button>
-          ))}
+      {/* Fixed top stack: filter + totals + denom tally. Does NOT scroll. */}
+      <div className="border-b border-[var(--color-border)] px-5 py-3">
+        <div className="flex flex-col gap-3">
+          <div className="eyebrow">01 / FILTER</div>
+          <div className="flex flex-wrap gap-2">
+            {chips.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => applyChip(c.id)}
+                className={
+                  chip === c.id
+                    ? "border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--color-accent-ink)]"
+                    : "border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--color-text)]"
+                }
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+          {(range.from || range.to) && (
+            <div className="flex items-center gap-2 border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-xs">
+              <span className="font-mono tabular-nums text-[var(--color-text)]">
+                {range.from ? formatDate(range.from) : "—"} →{" "}
+                {range.to ? formatDate(range.to) : "—"}
+              </span>
+              <button
+                type="button"
+                onClick={clearRange}
+                aria-label="Clear range"
+                className="ml-auto flex h-6 w-6 items-center justify-center border border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)]"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
         </div>
-        {(range.from || range.to) && (
-          <div className="flex items-center gap-2 border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-xs">
-            <span className="font-mono tabular-nums text-[var(--color-text)]">
-              {range.from ? formatDate(range.from) : "—"} →{" "}
-              {range.to ? formatDate(range.to) : "—"}
-            </span>
-            <button
-              type="button"
-              onClick={clearRange}
-              aria-label="Clear range"
-              className="ml-auto flex h-6 w-6 items-center justify-center border border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)]"
-            >
-              <X size={12} />
-            </button>
-          </div>
-        )}
-      </section>
 
-      <section className="flex flex-col gap-3 px-5 pb-4">
-        <div className="eyebrow">02 / TOTALS</div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="flex flex-col gap-1 border border-[var(--color-border)] px-3 py-2">
-            <span className="eyebrow">VERIFIED</span>
-            <span className="font-mono text-base tabular-nums">
-              ₹{formatINR(totals.verified)}
-            </span>
-          </div>
-          <div className="flex flex-col gap-1 border border-[var(--color-border)] px-3 py-2">
-            <span className="eyebrow">UNVERIFIED</span>
-            <span className="font-mono text-base tabular-nums">
-              ₹{formatINR(totals.unverified)}
-            </span>
-          </div>
-          <div className="flex flex-col gap-1 border border-[var(--color-border)] px-3 py-2">
-            <span className="eyebrow">SPENT (RANGE)</span>
-            <span className="font-mono text-base tabular-nums">
-              ₹{formatINR(spentInRange)}
-            </span>
-          </div>
-          <div className="flex flex-col gap-1 border border-[var(--color-border-strong)] px-3 py-2">
-            <span className="eyebrow">NET (RANGE)</span>
-            <span className="font-mono text-base font-semibold tabular-nums">
-              ₹{formatINR(totals.total - spentInRange)}
-            </span>
-          </div>
+        <div className="mt-4 flex flex-col">
+          <div className="eyebrow mb-2">02 / TOTALS</div>
+          <TotalRow label="VERIFIED" value={totals.verified} />
+          <TotalRow label="UNVERIFIED" value={totals.unverified} />
+          <TotalRow label="TOTAL" value={totals.total} emphasis />
         </div>
-      </section>
 
-      <section className="flex flex-col gap-3 px-5 pb-4">
-        <div className="eyebrow">03 / DENOM TALLY</div>
-        <DenomTally
-          counts={inventory}
-          emphasis={anyNegative ? "destructive" : "default"}
-        />
-      </section>
+        <div className="mt-4 flex flex-col gap-2">
+          <div className="eyebrow">03 / DENOM TALLY</div>
+          <DenomTally
+            counts={inventory}
+            emphasis={anyNegative ? "destructive" : "default"}
+          />
+        </div>
+      </div>
 
-      <section className="flex flex-col gap-3 px-5 pb-4">
-        <div className="eyebrow">04 / VOUCHERS</div>
+      {/* Vouchers — the ONLY scrollable region in the route detail. */}
+      <div className="flex-1 overflow-y-auto px-5 py-3">
+        <div className="eyebrow mb-2">04 / VOUCHERS</div>
         {vouchers.length === 0 ? (
           <div className="flex flex-col items-center gap-1 py-6">
             <div className="eyebrow">00 / EMPTY</div>
             <p className="text-sm text-[var(--color-text-muted)]">
-              No vouchers in this range. Tap + Add voucher.
+              No vouchers in this range. Tap + to add one.
             </p>
           </div>
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 pb-20">
             {vouchers.map((v) => (
               <VoucherRow
                 key={v.id}
@@ -259,75 +253,21 @@ export default function RouteScreen() {
             ))}
           </div>
         )}
-      </section>
-
-      {spends.length > 0 && (
-        <section className="flex flex-col gap-3 px-5 pb-4">
-          <button
-            type="button"
-            onClick={() => setSpendsOpen((v) => !v)}
-            className="flex items-center justify-between border-b border-[var(--color-border)] py-1"
-          >
-            <span className="eyebrow">05 / SPENDS IN RANGE</span>
-            <ChevronRight
-              size={14}
-              aria-hidden
-              className={
-                spendsOpen
-                  ? "rotate-90 text-[var(--color-text-muted)] transition-transform"
-                  : "text-[var(--color-text-muted)] transition-transform"
-              }
-            />
-          </button>
-          {spendsOpen && (
-            <div className="flex flex-col gap-2">
-              {spends.map((s) => (
-                <SpendRow
-                  key={s.id}
-                  spend={s}
-                  onEdit={() =>
-                    useNavStore
-                      .getState()
-                      .go({
-                        name: "spend-editor",
-                        params: { spendId: s.id },
-                      })
-                  }
-                  onDelete={() => {
-                    if (!user) return;
-                    void deleteSpend(user.uid, s.id);
-                  }}
-                />
-              ))}
-            </div>
-          )}
-        </section>
-      )}
-
-      <div className="sticky bottom-0 z-20 flex gap-2 border-t border-[var(--color-border-strong)] bg-[var(--color-bg)] px-5 py-3">
-        <button
-          type="button"
-          onClick={() =>
-            useNavStore
-              .getState()
-              .go({ name: "voucher-editor", params: { routeId } })
-          }
-          className="flex h-11 flex-1 items-center justify-center gap-1 border border-[var(--color-border-strong)] bg-[var(--color-accent)] text-sm font-bold uppercase tracking-[0.12em] text-[var(--color-accent-ink)] active:opacity-80"
-        >
-          <Plus size={14} />
-          Add voucher
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            useNavStore.getState().go({ name: "spend-editor", params: {} })
-          }
-          className="flex h-11 flex-1 items-center justify-center gap-1 border border-[var(--color-border-strong)] bg-[var(--color-bg)] text-sm font-bold uppercase tracking-[0.12em] text-[var(--color-text)] active:bg-[var(--color-surface)]"
-        >
-          <Plus size={14} />
-          Add spend
-        </button>
       </div>
+
+      <button
+        type="button"
+        onClick={() =>
+          useNavStore
+            .getState()
+            .go({ name: "voucher-editor", params: { routeId } })
+        }
+        aria-label="Add voucher"
+        className="absolute bottom-4 right-4 z-20 flex h-12 items-center gap-2 border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-4 text-sm font-bold uppercase tracking-[0.14em] text-[var(--color-accent-ink)] shadow-[0_8px_20px_rgba(0,0,0,0.28)] active:translate-y-px"
+      >
+        <Plus size={18} />
+        <span>Voucher</span>
+      </button>
 
       {rangeSheetOpen && (
         <DateRangeSheet

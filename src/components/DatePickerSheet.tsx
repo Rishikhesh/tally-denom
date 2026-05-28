@@ -85,10 +85,15 @@ export function DatePickerSheet({
   const month = visibleMonth.getMonth();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const leadingBlanks = new Date(year, month, 1).getDay();
-  const cells = Array.from(
-    { length: leadingBlanks + daysInMonth },
-    (_, index) => (index < leadingBlanks ? null : index - leadingBlanks + 1),
-  );
+  // Always render a full 6-week grid (42 cells) so the calendar height stays
+  // constant across months that have 4, 5, or 6 weeks. Trailing cells beyond
+  // the actual month days render as blank.
+  const cells = Array.from({ length: 42 }, (_, index) => {
+    if (index < leadingBlanks) return null;
+    const day = index - leadingBlanks + 1;
+    if (day > daysInMonth) return null;
+    return day;
+  });
   const monthLabel = visibleMonth.toLocaleDateString("en", {
     month: "long",
     year: "numeric",

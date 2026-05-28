@@ -58,9 +58,11 @@ export default function App() {
       <div className="app-shell-wrap">
         <div className="phone-canvas">
           {pwaUpdate.needRefresh && <PwaUpdatePrompt />}
-          <Suspense fallback={<Loader />}>
-            <SignInScreen />
-          </Suspense>
+          <div className="relative flex-1 overflow-hidden">
+            <Suspense fallback={<Loader />}>
+              <SignInScreen />
+            </Suspense>
+          </div>
         </div>
       </div>
     );
@@ -102,11 +104,15 @@ export default function App() {
       <div className="phone-canvas">
         {pwaUpdate.needRefresh && <PwaUpdatePrompt />}
         <div
-          className="flex-1 overflow-y-auto"
-          style={{
-            paddingBottom:
-              "calc(var(--tab-bar-height) + var(--tab-safe-bottom))",
-          }}
+          className="relative flex-1 overflow-hidden"
+          style={
+            showTabBar(top)
+              ? {
+                  paddingBottom:
+                    "calc(var(--tab-bar-height) + var(--tab-safe-bottom))",
+                }
+              : undefined
+          }
         >
           <Suspense fallback={<Loader />}>{renderScreen()}</Suspense>
         </div>
