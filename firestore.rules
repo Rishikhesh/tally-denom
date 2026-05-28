@@ -1,0 +1,92 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function isInt(x) {
+      return x is int;
+    }
+
+    function nonNegInt(x) {
+      return x is int && x >= 0;
+    }
+
+    function hasAllDenomKeys(d) {
+      return d.keys().toSet() ==
+        ['D500','D200','D100','D50','D20','D10','D5','D2','D1'].toSet();
+    }
+
+    function denomsAllNonNegInt(d) {
+      return nonNegInt(d.D500) && nonNegInt(d.D200) && nonNegInt(d.D100) &&
+             nonNegInt(d.D50)  && nonNegInt(d.D20)  && nonNegInt(d.D10)  &&
+             nonNegInt(d.D5)   && nonNegInt(d.D2)   && nonNegInt(d.D1);
+    }
+
+    function denomsSumEq(d, target) {
+      return target == d.D500 * 500 + d.D200 * 200 + d.D100 * 100 +
+                       d.D50  * 50  + d.D20  * 20  + d.D10  * 10  +
+                       d.D5   * 5   + d.D2   * 2   + d.D1   * 1;
+    }
+
+    function isYmd(s) {
+      return s is string && s.matches('^\\d{4}-\\d{2}-\\d{2}$');
+    }
+
+    function voucherValid(data) {
+      return isInt(data.total) && data.total >= 0 &&
+             data.denoms is map &&
+             hasAllDenomKeys(data.denoms) &&
+             denomsAllNonNegInt(data.denoms) &&
+             denomsSumEq(data.denoms, data.total) &&
+             data.verified is bool &&
+             data.routeId is string &&
+             isYmd(data.txDate);
+    }
+
+    function spendValid(data) {
+      return isInt(data.amount) && data.amount >= 0 &&
+             data.denoms is map &&
+             hasAllDenomKeys(data.denoms) &&
+             denomsAllNonNegInt(data.denoms) &&
+             denomsSumEq(data.denoms, data.amount) &&
+             isYmd(data.txDate);
+    }
+
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+
+      match /routes/{routeId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      match /vouchers/{voucherId} {
+        allow read:   if isOwner(uid);
+        allow create: if isOwner(uid) && voucherValid(request.resource.data);
+        allow update: if isOwner(uid) && voucherValid(request.resource.data);
+        allow delete: if isOwner(uid);
+      }
+
+      match /spends/{spendId} {
+        allow read:   if isOwner(uid);
+        allow create: if isOwner(uid) && spendValid(request.resource.data);
+        allow update: if isOwner(uid) && spendValid(request.resource.data);
+        allow delete: if isOwner(uid);
+      }
+
+      match /activities/{activityId} {
+        // Activities are an immutable audit log.
+        allow read, create: if isOwner(uid);
+        allow update, delete: if false;
+      }
+
+      // Owner-only fallback for anything else stored under the user doc.
+      match /{rest=**} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+  }
+}

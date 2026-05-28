@@ -1,0 +1,16 @@
+{
+  "name": "Tally",
+  "short_name": "Tally",
+  "description": "Tally.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    { "src": "/icon-maskable.svg?v=1", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" },
+    { "src": "/favicon.svg?v=1", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

@@ -1,0 +1,6 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" rx="112" fill="#0a0a0a" />
+  <!-- "=" mark kept within the maskable safe zone (center 80%). -->
+  <rect x="176" y="216" width="160" height="32" rx="16" fill="#ffffff" />
+  <rect x="176" y="264" width="160" height="32" rx="16" fill="#ffffff" />
+</svg>
