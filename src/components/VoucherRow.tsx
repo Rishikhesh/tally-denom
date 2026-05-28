@@ -1,4 +1,4 @@
-import { Check, Pencil, Trash2, X } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 import {
   Dialog,
@@ -64,23 +64,13 @@ export function VoucherRow({
             </span>
           </div>
           <div className="flex min-w-0 items-center justify-between gap-2">
-            <span
-              className={cn(
-                "inline-flex shrink-0 items-center border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em]",
-                voucher.verified
-                  ? "border-[var(--color-border-strong)] bg-[var(--color-accent)] text-[var(--color-accent-ink)]"
-                  : "border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)]",
-              )}
-            >
-              {voucher.verified ? "Verified" : "Unverified"}
-            </span>
             <span className="shrink-0 font-mono text-xs tabular-nums text-[var(--color-text-muted)]">
               {formatDate(voucher.txDate)}
             </span>
           </div>
         </button>
 
-        {/* Icon actions */}
+        {/* Icon actions: Edit, Delete only. Verify toggle now lives on the pill. */}
         <div className="flex shrink-0 items-stretch border-l border-[var(--color-border-strong)]">
           <button
             type="button"
@@ -97,21 +87,6 @@ export function VoucherRow({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              onToggleVerify();
-            }}
-            aria-label={
-              voucher.verified
-                ? `Unverify voucher ${voucher.code}`
-                : `Verify voucher ${voucher.code}`
-            }
-            className="flex h-full min-h-10 w-10 items-center justify-center border-l border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)] active:bg-[var(--color-surface)]"
-          >
-            {voucher.verified ? <X size={16} /> : <Check size={16} />}
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
               setConfirmOpen(true);
             }}
             aria-label={`Delete voucher ${voucher.code}`}
@@ -120,6 +95,37 @@ export function VoucherRow({
             <Trash2 size={16} />
           </button>
         </div>
+      </div>
+
+      {/* Verify/Unverify pill — tap it to toggle state. */}
+      <div className="flex items-center border-t border-[var(--color-border)] px-3 py-2">
+        <button
+          type="button"
+          onClick={onToggleVerify}
+          aria-label={
+            voucher.verified
+              ? `Unverify voucher ${voucher.code}`
+              : `Verify voucher ${voucher.code}`
+          }
+          aria-pressed={voucher.verified}
+          className={cn(
+            "inline-flex items-center border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em] active:opacity-80",
+            voucher.verified
+              ? "border-[var(--color-border-strong)] bg-[var(--color-accent)] text-[var(--color-accent-ink)]"
+              : "border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)]",
+          )}
+        >
+          {voucher.verified ? (
+            "VERIFIED"
+          ) : (
+            <span>
+              UNVERIFIED
+              <span className="ml-1 normal-case italic tracking-normal text-[var(--color-text-muted)]">
+                · tap to verify
+              </span>
+            </span>
+          )}
+        </button>
       </div>
 
       {expanded && (

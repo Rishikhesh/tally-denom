@@ -1,5 +1,5 @@
 import { ChevronRight, FileText, MapPin, Wallet } from "lucide-react";
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { formatDate } from "@/lib/date";
 import type { ActivityType } from "@/lib/activity";
 
@@ -16,6 +16,12 @@ interface Activity {
 interface Props {
   activity: Activity;
   onTap?: () => void;
+  /**
+   * When set on a `voucher.create` row, surfaces a `[ VERIFY ]` CTA in place
+   * of the chevron and annotates the title with an `(UNVERIFIED)` hint.
+   */
+  unverified?: boolean;
+  onVerify?: () => void;
 }
 
 function renderIcon(type: ActivityType): ReactNode {
@@ -50,35 +56,92 @@ function relativeTime(createdAt: number, now: number = Date.now()): string {
   return `${weekday} ${dayNum} ${month} ${hh}:${mm}`;
 }
 
-export function ActivityRow({ activity, onTap }: Props) {
+export function ActivityRow({
+  activity,
+  onTap,
+  unverified,
+  onVerify,
+}: Props) {
   const tappable = typeof onTap === "function";
+  const isVoucherCreate = activity.type === "voucher.create";
+  const showVerifyCta = isVoucherCreate && unverified === true && !!onVerify;
+  const showUnverifiedBadge = isVoucherCreate && unverified === true;
 
   const metaParts: string[] = [relativeTime(activity.createdAt)];
   if (activity.txDate) metaParts.push(formatDate(activity.txDate));
   if (activity.amount != null) metaParts.push(`₹${formatINR(activity.amount)}`);
 
-  const content = (
-    <>
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center border border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)]">
-        {renderIcon(activity.type)}
-      </div>
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-sm font-semibold text-[var(--color-text)]">
-          {activity.title}
-        </span>
-        <span className="truncate font-mono text-xs tabular-nums text-[var(--color-text-muted)]">
-          {metaParts.join(" · ")}
-        </span>
-      </div>
-      {tappable && (
-        <ChevronRight
-          size={16}
-          aria-hidden
-          className="shrink-0 text-[var(--color-text-muted)]"
-        />
-      )}
-    </>
+  function handleVerifyClick(e: MouseEvent<HTMLButtonElement>) {
+    e.stopPropagation();
+    if (onVerify) onVerify();
+  }
+
+  const icon = (
+    <div className="flex h-9 w-9 shrink-0 items-center justify-center border border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)]">
+      {renderIcon(activity.type)}
+    </div>
   );
+
+  // Strip the trailing action verb so the title reads as the entity, not
+  // "VCH #X created". The icon already conveys the action.
+  const cleanTitle = activity.title.replace(
+    / (created|edited|deleted|verified|unverified)$/i,
+    "",
+  );
+
+  const body = (
+    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+      <span className="flex min-w-0 items-baseline gap-1.5">
+        <span className="min-w-0 truncate text-sm font-semibold text-[var(--color-text)]">
+          {cleanTitle}
+        </span>
+        {showUnverifiedBadge && (
+          <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-text-muted)]">
+            (UNVERIFIED)
+          </span>
+        )}
+      </span>
+      <span className="truncate font-mono text-xs tabular-nums text-[var(--color-text-muted)]">
+        {metaParts.join(" · ")}
+      </span>
+    </div>
+  );
+
+  const trailing = showVerifyCta ? (
+    <button
+      type="button"
+      onClick={handleVerifyClick}
+      aria-label="Verify voucher"
+      className="shrink-0 border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--color-accent-ink)] active:opacity-80"
+    >
+      [ VERIFY ]
+    </button>
+  ) : tappable ? (
+    <ChevronRight
+      size={16}
+      aria-hidden
+      className="shrink-0 text-[var(--color-text-muted)]"
+    />
+  ) : null;
+
+  // When the row has a verify CTA, we can't wrap the whole row in a <button>
+  // (nested interactive elements are invalid). Render a div, hang the tap
+  // handler on the body, and let the inline verify CTA stop propagation.
+  if (tappable && showVerifyCta) {
+    return (
+      <div className="flex w-full items-center gap-3 border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2">
+        {icon}
+        <button
+          type="button"
+          onClick={onTap}
+          className="flex min-w-0 flex-1 items-center gap-3 text-left active:opacity-80"
+        >
+          {body}
+        </button>
+        {trailing}
+      </div>
+    );
+  }
 
   if (tappable) {
     return (
@@ -87,14 +150,18 @@ export function ActivityRow({ activity, onTap }: Props) {
         onClick={onTap}
         className="flex w-full items-center gap-3 border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-left active:bg-[var(--color-surface)]"
       >
-        {content}
+        {icon}
+        {body}
+        {trailing}
       </button>
     );
   }
 
   return (
     <div className="flex w-full items-center gap-3 border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2">
-      {content}
+      {icon}
+      {body}
+      {trailing}
     </div>
   );
 }

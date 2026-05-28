@@ -40,7 +40,7 @@ export function BottomSheet({
         onWheel={(e) => e.preventDefault()}
       />
       <div
-        className="absolute inset-x-0 bottom-0 z-[51] flex max-h-[88%] flex-col overflow-hidden overscroll-contain border-t border-[var(--color-border-strong)] bg-[var(--color-bg)] animate-sheet-up shadow-[0_-28px_72px_rgba(0,0,0,0.45),0_-8px_20px_rgba(0,0,0,0.25)]"
+        className="absolute inset-x-3 bottom-3 z-[51] flex max-h-[88%] flex-col overflow-hidden overscroll-contain border border-[var(--color-border-strong)] bg-[var(--color-bg)] animate-sheet-up shadow-[0_-28px_72px_rgba(0,0,0,0.45),0_-8px_20px_rgba(0,0,0,0.25)]"
         style={
           fixedHeight
             ? {

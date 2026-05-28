@@ -1,5 +1,5 @@
 import { Minus, Plus } from "lucide-react";
-import type { ChangeEvent, FocusEvent } from "react";
+import { type ChangeEvent, type FocusEvent, useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +19,19 @@ function sanitize(raw: string): number {
 export function DenomRow({ denom, count, onChange }: Props) {
   const subtotal = denom * count;
 
+  // Local string buffer so we can show "" without breaking controlled-ness.
+  // While focused, the buffer is the source of truth for the displayed text;
+  // while blurred, it mirrors the parent-supplied `count`.
+  const [displayed, setDisplayed] = useState<string>(String(count));
+  const focusedRef = useRef(false);
+
+  // Sync from parent → buffer when not actively edited.
+  useEffect(() => {
+    if (!focusedRef.current) {
+      setDisplayed(String(count));
+    }
+  }, [count]);
+
   function step(delta: number) {
     const next = count + delta;
     if (next < 0) return;
@@ -26,15 +39,27 @@ export function DenomRow({ denom, count, onChange }: Props) {
   }
 
   function handleInput(e: ChangeEvent<HTMLInputElement>) {
-    // Strip everything but digits — number input still receives `e` / `.`
-    // events in some browsers; normalise on the way in.
+    // Strip everything but digits — `number` inputs still emit `e` / `.` in
+    // some browsers; normalise on the way in.
     const cleaned = e.target.value.replace(/[^\d]/g, "");
+    setDisplayed(cleaned);
     onChange(sanitize(cleaned));
   }
 
+  function handleFocus() {
+    focusedRef.current = true;
+    // Tapping a "0" field on phones is annoying — clear it for the user.
+    if (count === 0) {
+      setDisplayed("");
+    }
+  }
+
   function handleBlur(e: FocusEvent<HTMLInputElement>) {
+    focusedRef.current = false;
     const cleaned = e.target.value.replace(/[^\d]/g, "");
-    onChange(sanitize(cleaned));
+    const next = sanitize(cleaned);
+    setDisplayed(String(next));
+    onChange(next);
   }
 
   return (
@@ -62,8 +87,9 @@ export function DenomRow({ denom, count, onChange }: Props) {
           inputMode="numeric"
           min={0}
           step={1}
-          value={count}
+          value={displayed}
           onChange={handleInput}
+          onFocus={handleFocus}
           onBlur={handleBlur}
           aria-label={`₹${denom} note count`}
           className="h-9 w-14 border border-[var(--color-border-strong)] border-x-0 bg-[var(--color-bg)] px-1 text-center text-base font-mono tabular-nums shadow-none focus-visible:ring-0"

@@ -1,4 +1,4 @@
-import { Activity, BarChart3, Home, Plus } from "lucide-react";
+import { Activity, BookOpen, Home, Plus } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import { type TabId } from "@/hooks/useNavStore";
 import { cn } from "@/lib/utils";
@@ -16,7 +16,7 @@ const TABS: Array<{ id: TabId; label: string; Icon: IconCmp }> = [
   { id: "home", label: "Home", Icon: Home },
   { id: "entry", label: "Entry", Icon: Plus },
   { id: "activity", label: "Activity", Icon: Activity },
-  { id: "analytics", label: "Stats", Icon: BarChart3 },
+  { id: "records", label: "Records", Icon: BookOpen },
 ];
 
 export function TabBar({ active, onChange }: Props) {

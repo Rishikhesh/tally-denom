@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   collection,
   doc,
@@ -334,6 +334,116 @@ export function useActivity(opts?: UseActivityOpts): Activity[] {
     const allow = new Set(typesKey.split(","));
     return rows.filter((r) => allow.has(r.type));
   }, [rows, typesKey]);
+}
+
+// ── Paginated activity feed (ActivityScreen) ──────────────────────────
+// Loads pages of size `pageSize` (default 50) and exposes a `loadMore`
+// callback. Active filters (`from`, `to`, `types`) drive the query and
+// resetting them automatically resets the page counter. The Firestore
+// listener fetches `pageSize * pages + 1` docs so we can detect whether
+// more pages exist without an extra round-trip. Type filtering still
+// happens client-side; pagination works on raw docs so the user can keep
+// loading more even when the filter is restrictive.
+
+export interface UseActivityPagedOpts {
+  pageSize?: number;
+  types?: ActivityType[];
+  from?: string;
+  to?: string;
+}
+
+export interface UseActivityPagedResult {
+  rows: Activity[];
+  hasMore: boolean;
+  loadMore: () => void;
+  pageSize: number;
+  rawCount: number;
+}
+
+export function useActivityPaged(
+  opts?: UseActivityPagedOpts,
+): UseActivityPagedResult {
+  const pageSize = opts?.pageSize ?? 50;
+  const { user } = useAuth();
+  const uid = user?.uid ?? null;
+
+  const typesKey = opts?.types ? opts.types.join(",") : "";
+  const from = opts?.from ?? null;
+  const to = opts?.to ?? null;
+
+  // Filters changing must reset the page counter. We encode the filter set
+  // into a key and store it alongside the `pages` count in one piece of
+  // state so the reset is atomic (no flicker / double-fetch).
+  const filterKey = `${from ?? ""}:${to ?? ""}`;
+  const [pagination, setPagination] = useState<{ key: string; pages: number }>(
+    { key: filterKey, pages: 1 },
+  );
+  if (pagination.key !== filterKey) {
+    // Derived-state pattern: reset during render when filters change.
+    setPagination({ key: filterKey, pages: 1 });
+  }
+  const pages = pagination.key === filterKey ? pagination.pages : 1;
+
+  const qKey = uid
+    ? `${uid}:${filterKey}:${pageSize}:${pages}`
+    : null;
+  const [keyed, setKeyed] = useState<{
+    key: string | null;
+    rows: Activity[];
+    hasMore: boolean;
+  }>({ key: null, rows: [], hasMore: false });
+
+  useEffect(() => {
+    if (!uid || !qKey) return;
+    const constraints = [];
+    if (from || to) {
+      if (from) constraints.push(where("txDate", ">=", from));
+      if (to) constraints.push(where("txDate", "<=", to));
+      constraints.push(orderBy("txDate", "desc"));
+      constraints.push(orderBy("createdAt", "desc"));
+    } else {
+      constraints.push(orderBy("createdAt", "desc"));
+    }
+    // `+1` is the look-ahead probe — if it comes back, more pages exist.
+    const fetchLimit = pageSize * pages + 1;
+    constraints.push(qLimit(fetchLimit));
+    const q = query(userScope(uid, "activities"), ...constraints);
+    const unsub = onSnapshot(q, (snap) => {
+      const docs = snap.docs;
+      const has = docs.length > pageSize * pages;
+      const trimmed = has ? docs.slice(0, pageSize * pages) : docs;
+      setKeyed({
+        key: qKey,
+        rows: trimmed.map((d) => mapActivity(d.id, d.data())),
+        hasMore: has,
+      });
+    });
+    return unsub;
+  }, [uid, qKey, from, to, pageSize, pages]);
+
+  const matchedKey = keyed.key === qKey;
+  const rawRows = matchedKey ? keyed.rows : (emptyArr as Activity[]);
+  const hasMore = matchedKey ? keyed.hasMore : false;
+
+  const filtered = useMemo(() => {
+    if (!typesKey) return rawRows;
+    const allow = new Set(typesKey.split(","));
+    return rawRows.filter((r) => allow.has(r.type));
+  }, [rawRows, typesKey]);
+
+  const loadMore = useCallback(() => {
+    setPagination((p) =>
+      p.key === filterKey ? { key: filterKey, pages: p.pages + 1 } : p,
+    );
+  }, [filterKey]);
+
+  return {
+    rows: filtered,
+    hasMore,
+    loadMore,
+    pageSize,
+    rawCount: rawRows.length,
+  };
 }
 
 // ── Mutation helpers ───────────────────────────────────────────────────

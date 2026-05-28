@@ -1,4 +1,5 @@
-import { ChevronLeft, Plus, X } from "lucide-react";
+import Fuse from "fuse.js";
+import { ChevronLeft, Plus, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { DateRangeSheet, DenomTally, Loader, VoucherRow } from "@/components";
 import { useAuth } from "@/hooks/useAuth";
@@ -68,34 +69,58 @@ export default function RouteScreen() {
   const [chip, setChip] = useState<ChipId>("all");
   const [range, setRange] = useState<Range>({});
   const [rangeSheetOpen, setRangeSheetOpen] = useState(false);
+  const [query, setQuery] = useState("");
 
   const route = useRoute(routeId);
-  const vouchers = useVouchersByRoute(routeId, range);
+  const allVouchersInRoute = useVouchersByRoute(routeId, range);
 
+  // Fuzzy search across code + date + total. Threshold 0.4 = forgiving but
+  // not noise. Rebuilt only when the underlying voucher list changes.
+  const fuse = useMemo(
+    () =>
+      new Fuse(
+        allVouchersInRoute.map((v) => ({
+          item: v,
+          code: v.code,
+          date: formatDate(v.txDate),
+          total: String(v.total),
+        })),
+        { keys: ["code", "date", "total"], threshold: 0.4, ignoreLocation: true },
+      ),
+    [allVouchersInRoute],
+  );
+  const q = query.trim();
+  const vouchers = useMemo(() => {
+    if (!q) return allVouchersInRoute;
+    return fuse.search(q).map((r) => r.item.item);
+  }, [q, allVouchersInRoute, fuse]);
+
+  // Totals + inventory reflect the date-filtered route (not the search) so
+  // the hero numbers don't lurch when the user types.
   const totals = useMemo(() => {
     if (!routeId) {
       return { verified: 0, unverified: 0, total: 0 };
     }
-    const stub = vouchers.map((v) => ({
+    const stub = allVouchersInRoute.map((v) => ({
       total: v.total,
       denoms: v.denoms,
       verified: v.verified,
       routeId: v.routeId,
     }));
     return routeTotals(stub, routeId);
-  }, [vouchers, routeId]);
+  }, [allVouchersInRoute, routeId]);
 
   // Voucher-only inventory. Spends are global, not subtracted at the route
   // level.
   const inventory = useMemo(() => {
-    const vStubs = vouchers.map((v) => ({
+    const vStubs = allVouchersInRoute.map((v) => ({
       total: v.total,
       denoms: v.denoms,
       verified: v.verified,
       routeId: v.routeId,
     }));
     return denomInventory(vStubs, []);
-  }, [vouchers]);
+  }, [allVouchersInRoute]);
 
   const anyNegative = DENOMS.some((d) => inventory[d] < 0);
 
@@ -118,9 +143,9 @@ export default function RouteScreen() {
   }
 
   function goBack() {
-    // Only call history.back(). The popstate listener inside useNavStore
-    // pops the in-app stack — calling both would double-pop.
-    if (typeof window !== "undefined") window.history.back();
+    // Store's goBack pops the in-app stack AND rewinds history, with a
+    // skip-flag so the popstate handler doesn't double-pop.
+    useNavStore.getState().goBack();
   }
 
   if (loading || !routeId) {
@@ -218,12 +243,39 @@ export default function RouteScreen() {
 
       {/* Vouchers — the ONLY scrollable region in the route detail. */}
       <div className="flex-1 overflow-y-auto px-5 py-3">
+        <div className="mb-3 flex h-10 items-center gap-2 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3">
+          <Search
+            size={14}
+            aria-hidden
+            className="shrink-0 text-[var(--color-text-muted)]"
+          />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search code, date, total"
+            aria-label="Search vouchers"
+            className="min-w-0 flex-1 bg-transparent text-sm text-[var(--color-text)] outline-none placeholder:text-[var(--color-text-muted)]"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Clear search"
+              className="flex h-6 w-6 shrink-0 items-center justify-center border border-[var(--color-border)] text-[var(--color-text-muted)]"
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
         <div className="eyebrow mb-2">04 / VOUCHERS</div>
         {vouchers.length === 0 ? (
           <div className="flex flex-col items-center gap-1 py-6">
             <div className="eyebrow">00 / EMPTY</div>
             <p className="text-sm text-[var(--color-text-muted)]">
-              No vouchers in this range. Tap + to add one.
+              {q
+                ? "No vouchers match the search."
+                : "No vouchers in this range. Tap + to add one."}
             </p>
           </div>
         ) : (

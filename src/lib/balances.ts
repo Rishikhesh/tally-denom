@@ -40,6 +40,24 @@ export function netBalance(vs: Voucher[], ss: Spend[]): number {
   return sumCollected(vs) - sumSpends(ss);
 }
 
+/** Sum denom counts across the supplied vouchers (verified or not). */
+export function sumVoucherDenoms(vs: Voucher[]): DenomCounts {
+  const out = emptyDenoms();
+  for (const v of vs) {
+    for (const d of DENOMS) out[d] += v.denoms[d];
+  }
+  return out;
+}
+
+/** Sum denom counts across the supplied spends. */
+export function sumSpendDenoms(ss: Spend[]): DenomCounts {
+  const out = emptyDenoms();
+  for (const s of ss) {
+    for (const d of DENOMS) out[d] += s.denoms[d];
+  }
+  return out;
+}
+
 /**
  * Per-denom inventory: collected (across all vouchers, verified or not) minus
  * what's been spent. May be negative if spends were entered against denoms

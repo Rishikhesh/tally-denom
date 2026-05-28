@@ -22,7 +22,23 @@ function DialogTrigger({
 function DialogPortal({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Portal>) {
-  return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />
+  // Mount the dialog inside the phone-canvas so on desktop (where the canvas
+  // is a 420 px centred card) the dialog doesn't render full-viewport-wide.
+  // Falls back to document.body when the canvas isn't on the page yet.
+  const [container] = React.useState<HTMLElement | null>(() => {
+    if (typeof document === "undefined") return null
+    return (
+      (document.querySelector(".phone-canvas") as HTMLElement | null) ??
+      document.body
+    )
+  })
+  return (
+    <DialogPrimitive.Portal
+      data-slot="dialog-portal"
+      container={container ?? undefined}
+      {...props}
+    />
+  )
 }
 
 function DialogClose({
@@ -39,8 +55,9 @@ function DialogOverlay({
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        // Brutalist backdrop: heavier darken + blur so the modal pops.
-        "fixed inset-0 z-50 bg-black/55 backdrop-blur-md data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
+        // Absolute (not fixed) so the overlay covers the phone-canvas only,
+        // not the desktop frame around it.
+        "absolute inset-0 z-50 bg-black/55 backdrop-blur-md data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
         className
       )}
       {...props}
@@ -62,9 +79,10 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          // Brutalist sheet: square corners, ink border, deep stacked shadow
-          // so the modal lifts off the blurred backdrop.
-          "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 border border-[var(--color-border-strong)] bg-[var(--color-bg)] p-6 outline-none duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg",
+          // Absolute (not fixed) so the dialog is positioned relative to the
+          // phone-canvas, not the viewport. Keeps it within the 420 px frame
+          // on desktop while still centering on the canvas.
+          "absolute top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 border border-[var(--color-border-strong)] bg-[var(--color-bg)] p-6 outline-none duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
           "shadow-[0_28px_72px_rgba(0,0,0,0.45),0_8px_20px_rgba(0,0,0,0.25)]",
           className
         )}

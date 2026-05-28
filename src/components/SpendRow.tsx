@@ -56,13 +56,6 @@ export function SpendRow({ spend, onEdit, onDelete }: Props) {
             </span>
           </div>
           <div className="flex min-w-0 items-center justify-between gap-2">
-            {spend.category ? (
-              <span className="inline-flex min-w-0 max-w-[60%] items-center truncate border border-[var(--color-border-strong)] px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--color-text)]">
-                {spend.category}
-              </span>
-            ) : (
-              <span aria-hidden />
-            )}
             <span className="shrink-0 font-mono text-xs tabular-nums text-[var(--color-text-muted)]">
               {formatDate(spend.txDate)}
             </span>

@@ -2,7 +2,12 @@ import { X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ActivityRow, Loader, SegControl } from "@/components";
 import { useAuth } from "@/hooks/useAuth";
-import { type Activity, useActivity } from "@/hooks/useData";
+import {
+  type Activity,
+  useActivityPaged,
+  useAllVouchers,
+  verifyVoucher,
+} from "@/hooks/useData";
 import { useNavStore } from "@/hooks/useNavStore";
 import type { ActivityType } from "@/lib/activity";
 import { dateRangePresets, formatDate } from "@/lib/date";
@@ -10,11 +15,13 @@ import { dateRangePresets, formatDate } from "@/lib/date";
 type TypeFilterId = "all" | "voucher" | "spend" | "route";
 type DateChipId = "all" | "today" | "yesterday" | "7d" | "30d" | "custom";
 
+// Verify/unverify events are intentionally hidden from the visible feed —
+// they still get logged for the audit trail (see useData.ts) but the user
+// only ever cares about the underlying voucher state, surfaced via the
+// row-level CTA on `voucher.create`.
 const ALL_VOUCHER: ActivityType[] = [
   "voucher.create",
   "voucher.edit",
-  "voucher.verify",
-  "voucher.unverify",
   "voucher.delete",
 ];
 const ALL_SPEND: ActivityType[] = [
@@ -30,10 +37,18 @@ interface Range {
 }
 
 export default function ActivityScreen() {
-  const { loading } = useAuth();
+  const { user, loading } = useAuth();
+  const vouchers = useAllVouchers();
   const [typeFilter, setTypeFilter] = useState<TypeFilterId>("all");
   const [dateChip, setDateChip] = useState<DateChipId>("all");
   const [range, setRange] = useState<Range>({});
+
+  // Map voucher id → verified flag for the row-level VERIFY CTA.
+  const voucherVerifiedMap = useMemo(() => {
+    const m = new Map<string, boolean>();
+    for (const v of vouchers) m.set(v.id, v.verified);
+    return m;
+  }, [vouchers]);
 
   const types = useMemo<ActivityType[] | undefined>(() => {
     if (typeFilter === "all") return undefined;
@@ -43,11 +58,27 @@ export default function ActivityScreen() {
     return undefined;
   }, [typeFilter]);
 
-  const activity = useActivity({
+  const {
+    rows: rawActivity,
+    hasMore,
+    loadMore,
+  } = useActivityPaged({
+    pageSize: 50,
     types,
     from: range.from,
     to: range.to,
   });
+
+  // Hide voucher.verify / voucher.unverify from the visible feed — they're
+  // logged for audit but the user only needs the underlying state, surfaced
+  // via the row-level VERIFY CTA on `voucher.create`.
+  const activity = useMemo(
+    () =>
+      rawActivity.filter(
+        (a) => a.type !== "voucher.verify" && a.type !== "voucher.unverify",
+      ),
+    [rawActivity],
+  );
 
   function applyDateChip(next: DateChipId) {
     setDateChip(next);
@@ -76,10 +107,10 @@ export default function ActivityScreen() {
   }
 
   function onTap(a: Activity) {
+    // Stay on the Activity tab; just push the target screen so the back
+    // arrow returns to this feed instead of unwinding through Entry.
     const nav = useNavStore.getState();
     if (a.type.startsWith("voucher.") && a.routeId) {
-      nav.setTab("entry");
-      nav.go({ name: "route", params: { routeId: a.routeId } });
       nav.go({
         name: "voucher-editor",
         params: { routeId: a.routeId, voucherId: a.refId },
@@ -87,12 +118,10 @@ export default function ActivityScreen() {
       return;
     }
     if (a.type.startsWith("spend.")) {
-      nav.setTab("entry");
       nav.go({ name: "spend-editor", params: { spendId: a.refId } });
       return;
     }
     if (a.type.startsWith("route.") && a.routeId) {
-      nav.setTab("entry");
       nav.go({ name: "route", params: { routeId: a.routeId } });
     }
   }
@@ -181,9 +210,37 @@ export default function ActivityScreen() {
             </p>
           </div>
         ) : (
-          activity.map((a) => (
-            <ActivityRow key={a.id} activity={a} onTap={() => onTap(a)} />
-          ))
+          <>
+            {activity.map((a) => {
+              const isCreate = a.type === "voucher.create";
+              const isUnverified =
+                isCreate &&
+                voucherVerifiedMap.has(a.refId) &&
+                voucherVerifiedMap.get(a.refId) === false;
+              return (
+                <ActivityRow
+                  key={a.id}
+                  activity={a}
+                  onTap={() => onTap(a)}
+                  unverified={isUnverified || undefined}
+                  onVerify={
+                    isUnverified && user
+                      ? () => void verifyVoucher(user.uid, a.refId)
+                      : undefined
+                  }
+                />
+              );
+            })}
+            {hasMore && (
+              <button
+                type="button"
+                onClick={loadMore}
+                className="mt-2 h-11 border border-[var(--color-border-strong)] bg-[var(--color-bg)] text-sm font-bold uppercase tracking-[0.14em] text-[var(--color-text)] active:bg-[var(--color-surface)]"
+              >
+                Load more
+              </button>
+            )}
+          </>
         )}
       </section>
       </div>

@@ -14,7 +14,7 @@ import { type PwaUpdateState, subscribeToPwaUpdates } from "@/pwa";
 const HomeScreen = lazy(() => import("@/screens/HomeScreen"));
 const EntryScreen = lazy(() => import("@/screens/EntryScreen"));
 const ActivityScreen = lazy(() => import("@/screens/ActivityScreen"));
-const AnalyticsScreen = lazy(() => import("@/screens/AnalyticsScreen"));
+const RecordsScreen = lazy(() => import("@/screens/RecordsScreen"));
 const RouteScreen = lazy(() => import("@/screens/RouteScreen"));
 const VoucherEditorScreen = lazy(() => import("@/screens/VoucherEditorScreen"));
 const SpendEditorScreen = lazy(() => import("@/screens/SpendEditorScreen"));
@@ -88,8 +88,8 @@ export default function App() {
         return <EntryScreen />;
       case "activity":
         return <ActivityScreen />;
-      case "analytics":
-        return <AnalyticsScreen />;
+      case "records":
+        return <RecordsScreen />;
       default:
         return <HomeScreen />;
     }

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type TabId = "home" | "entry" | "activity" | "analytics";
+export type TabId = "home" | "entry" | "activity" | "records";
 
 export interface NavEntry {
   /** Screen identifier — e.g. "route", "voucher-editor", "spend-editor". */
@@ -13,9 +13,19 @@ interface NavState {
   stack: NavEntry[];
   setTab: (tab: TabId) => void;
   go: (entry: NavEntry) => void;
+  /** Pop in reaction to a real browser-back / popstate. Don't call directly
+   *  from UI — use `goBack()` instead so browser history stays in sync. */
   back: () => void;
+  /** UI entry-point for an in-app back action (e.g. header chevron). Pops the
+   *  store stack AND rewinds the browser one step, suppressing the popstate
+   *  handler so we don't double-pop. */
+  goBack: () => void;
   reset: () => void;
 }
+
+// Module-private flag toggled by `goBack` so the popstate handler can skip
+// its store-pop on the matching history event.
+let skipNextPopstate = false;
 
 export const useNavStore = create<NavState>((set, get) => ({
   tab: "home",
@@ -39,12 +49,17 @@ export const useNavStore = create<NavState>((set, get) => ({
     }
   },
 
-  /**
-   * Pop one entry. Does NOT touch history — the popstate listener calls this
-   * in reaction to a real history event so we mustn't push another.
-   */
   back: () => {
     set((s) => (s.stack.length === 0 ? s : { stack: s.stack.slice(0, -1) }));
+  },
+
+  goBack: () => {
+    const len = get().stack.length;
+    if (len > 0) {
+      skipNextPopstate = true;
+      set((s) => ({ stack: s.stack.slice(0, -1) }));
+    }
+    if (typeof window !== "undefined") window.history.back();
   },
 
   reset: () => {
@@ -65,6 +80,10 @@ declare global {
 if (typeof window !== "undefined" && !window.__tallyNavPopstateBound) {
   window.__tallyNavPopstateBound = true;
   window.addEventListener("popstate", () => {
+    if (skipNextPopstate) {
+      skipNextPopstate = false;
+      return;
+    }
     useNavStore.getState().back();
   });
 }

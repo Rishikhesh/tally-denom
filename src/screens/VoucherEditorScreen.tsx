@@ -1,4 +1,4 @@
-import { Check, ChevronLeft } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { useState } from "react";
 import { DatePickerSheet, DenomRow, Loader } from "@/components";
 import { Input } from "@/components/ui/input";
@@ -16,10 +16,17 @@ import {
   type DenomCounts,
   emptyDenoms,
   isValidCounts,
-  reconcile,
+  sumDenoms,
 } from "@/lib/denoms";
 
 const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function formatINR(n: number): string {
+  return n.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
 
 export default function VoucherEditorScreen() {
   const { user, loading } = useAuth();
@@ -36,15 +43,11 @@ export default function VoucherEditorScreen() {
     ? allVouchers.find((v) => v.id === voucherId) ?? null
     : null;
 
-  // Hydration pattern: render-time setState driven by a comparator.
-  // When editing, we wait for `existing` to be present, then initialise the
-  // form once. The "last hydrated id" state guards against re-running.
   const [hydratedId, setHydratedId] = useState<string | null>(
     voucherId ? null : "__new__",
   );
 
   const [code, setCode] = useState("");
-  const [total, setTotal] = useState("");
   const [denoms, setDenoms] = useState<DenomCounts>(emptyDenoms());
   const [txDate, setTxDate] = useState<string>(todayInputDate());
   const [dateSheetOpen, setDateSheetOpen] = useState(false);
@@ -53,7 +56,6 @@ export default function VoucherEditorScreen() {
 
   if (voucherId && existing && hydratedId !== voucherId) {
     setCode(existing.code);
-    setTotal(String(existing.total));
     setDenoms({ ...existing.denoms });
     setTxDate(existing.txDate || todayInputDate());
     setHydratedId(voucherId);
@@ -61,16 +63,7 @@ export default function VoucherEditorScreen() {
   const hydrated = hydratedId !== null;
   const isEditing = !!voucherId;
 
-  const totalNumeric = (() => {
-    if (total === "") return NaN;
-    const n = Number(total);
-    if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) return NaN;
-    return n;
-  })();
-
-  const remaining = Number.isFinite(totalNumeric)
-    ? reconcile(denoms, totalNumeric)
-    : 0;
+  const totalNumeric = sumDenoms(denoms);
   const dateValid = ISO_RE.test(txDate);
   const denomsOk = isValidCounts(denoms);
 
@@ -78,12 +71,23 @@ export default function VoucherEditorScreen() {
     !!user &&
     !!routeId &&
     code.trim().length > 0 &&
-    Number.isFinite(totalNumeric) &&
-    remaining === 0 &&
+    totalNumeric > 0 &&
     denomsOk &&
     dateValid &&
     !saving &&
     (!voucherId || hydrated);
+
+  // Specific reason shown next to the disabled save button — never leave the
+  // user guessing why the CTA is grey.
+  let disabledReason: string | null = null;
+  if (!saving) {
+    if (!code.trim()) disabledReason = "Enter a voucher code to save";
+    else if (totalNumeric <= 0)
+      disabledReason = "Add at least one note or coin";
+    else if (!denomsOk)
+      disabledReason = "Denomination counts must be whole numbers ≥ 0";
+    else if (!dateValid) disabledReason = "Pick a valid date";
+  }
 
   async function handleSave() {
     if (!canSave || !user || !routeId) return;
@@ -106,7 +110,7 @@ export default function VoucherEditorScreen() {
           txDate,
         });
       }
-      if (typeof window !== "undefined") window.history.back();
+      useNavStore.getState().goBack();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save voucher");
       setSaving(false);
@@ -114,9 +118,7 @@ export default function VoucherEditorScreen() {
   }
 
   function goBack() {
-    // Only call history.back(). The popstate listener inside useNavStore
-    // pops the in-app stack — calling both would double-pop.
-    if (typeof window !== "undefined") window.history.back();
+    useNavStore.getState().goBack();
   }
 
   if (loading || !routeId || (voucherId && !hydrated)) {
@@ -126,13 +128,6 @@ export default function VoucherEditorScreen() {
       </div>
     );
   }
-
-  const remainingClass =
-    remaining === 0
-      ? "text-[var(--color-text)]"
-      : remaining > 0
-        ? "text-[var(--color-text-muted)]"
-        : "text-[var(--color-destructive)]";
 
   return (
     <div className="flex h-full flex-col">
@@ -153,8 +148,10 @@ export default function VoucherEditorScreen() {
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto">
-        <section className="flex flex-col gap-3 px-5 py-4">
+      {/* Fixed top: CODE + DATE + TOTAL. Always visible while user scrolls
+          the denominations. */}
+      <div className="border-b border-[var(--color-border)] px-5 py-3">
+        <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-1">
             <Label htmlFor="vch-code" className="eyebrow">
               CODE
@@ -170,66 +167,42 @@ export default function VoucherEditorScreen() {
           </div>
 
           <div className="flex flex-col gap-1">
-            <Label htmlFor="vch-total" className="eyebrow">
-              TOTAL
-            </Label>
-            <Input
-              id="vch-total"
-              type="number"
-              inputMode="numeric"
-              min={0}
-              step={1}
-              value={total}
-              onChange={(e) => setTotal(e.target.value.replace(/[^\d]/g, ""))}
-              placeholder="1000"
-              className="h-10 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 text-base font-mono tabular-nums text-[var(--color-text)] shadow-none focus-visible:ring-0"
-            />
-          </div>
-
-          <div className="flex flex-col gap-1">
             <span className="eyebrow">DATE</span>
             <button
               type="button"
               onClick={() => setDateSheetOpen(true)}
-              className="flex h-10 items-center justify-between border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 text-base font-mono tabular-nums text-[var(--color-text)]"
+              className="flex h-10 items-center justify-between border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 text-sm font-mono tabular-nums text-[var(--color-text)]"
             >
               {dateValid ? formatDate(txDate) : "—"}
               <span className="text-xs text-[var(--color-text-muted)]">▾</span>
             </button>
           </div>
-        </section>
+        </div>
 
-        <section className="flex flex-col gap-3 px-5 pb-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="eyebrow">04 / DENOMINATIONS</span>
-              {Number.isFinite(totalNumeric) && remaining === 0 && (
-                <Check
-                  size={14}
-                  aria-hidden
-                  className="text-[var(--color-success,#1f7a3a)]"
-                />
-              )}
-            </div>
-            <span className={`font-mono text-sm tabular-nums ${remainingClass}`}>
-              REMAINING ₹{Number.isFinite(totalNumeric) ? remaining : 0}
-            </span>
-          </div>
+        <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-[var(--color-border-strong)] pt-3">
+          <span className="eyebrow">TOTAL</span>
+          <span className="min-w-0 truncate text-right font-display text-2xl tabular-nums text-[var(--color-text)]">
+            ₹ {formatINR(totalNumeric)}
+          </span>
+        </div>
+      </div>
 
-          <div className="flex flex-col gap-1.5">
-            {DENOMS.map((d) => (
-              <DenomRow
-                key={d}
-                denom={d}
-                count={denoms[d]}
-                onChange={(next) => setDenoms({ ...denoms, [d]: next })}
-              />
-            ))}
-          </div>
-        </section>
+      {/* Scrollable denominations list — the only thing that scrolls. */}
+      <div className="flex-1 overflow-y-auto px-5 py-3">
+        <div className="eyebrow mb-2">04 / DENOMINATIONS</div>
+        <div className="flex flex-col gap-1.5">
+          {DENOMS.map((d) => (
+            <DenomRow
+              key={d}
+              denom={d}
+              count={denoms[d]}
+              onChange={(next) => setDenoms({ ...denoms, [d]: next })}
+            />
+          ))}
+        </div>
 
         {error && (
-          <div className="px-5 pb-3 text-xs font-mono text-[var(--color-destructive)]">
+          <div className="mt-3 font-mono text-xs text-[var(--color-destructive)]">
             {error}
           </div>
         )}
@@ -247,6 +220,11 @@ export default function VoucherEditorScreen() {
         >
           {saving ? "Saving…" : isEditing ? "Update voucher" : "Save voucher"}
         </button>
+        {!canSave && disabledReason && (
+          <div className="mt-2 text-center font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--color-text-muted)]">
+            {disabledReason}
+          </div>
+        )}
       </div>
 
       {dateSheetOpen && (
