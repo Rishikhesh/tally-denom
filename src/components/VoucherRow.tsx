@@ -1,5 +1,5 @@
-import { Check, Lock, Pencil, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { Check, Lock, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { type MouseEvent as ReactMouseEvent, useRef, useState } from "react";
 import { DenomLine } from "@/components/DenomLine";
 import {
   Dialog,
@@ -44,7 +44,14 @@ interface Props {
    * user can attach a spend directly from the voucher list row.
    */
   onAddSpend?: () => void;
+  /**
+   * When supplied on a verified row, a long-press opens a confirm sheet to
+   * revert the voucher to unverified. Verification is otherwise one-way.
+   */
+  onUnverify?: () => void;
 }
+
+const LONG_PRESS_MS = 500;
 
 function formatINR(n: number): string {
   return n.toLocaleString("en-IN", {
@@ -61,8 +68,10 @@ export function VoucherRow({
   readOnly = false,
   onRowTap,
   onAddSpend,
+  onUnverify,
 }: Props) {
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [unverifyOpen, setUnverifyOpen] = useState(false);
 
   // `readOnly` is now the sole gate for hiding mutation controls. The
   // verified-ness of a voucher is conveyed via the pill / badge instead —
@@ -72,8 +81,45 @@ export function VoucherRow({
   // Lock icon only when the caller explicitly marks the row read-only.
   const showLockIcon = readOnly;
 
+  // Long-press on a verified row → confirm revert-to-unverified.
+  const canLongPressUnverify = verified && !!onUnverify;
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressed = useRef(false);
+
+  function clearPress() {
+    if (pressTimer.current) {
+      clearTimeout(pressTimer.current);
+      pressTimer.current = null;
+    }
+  }
+  function handlePointerDown() {
+    if (!canLongPressUnverify) return;
+    longPressed.current = false;
+    clearPress();
+    pressTimer.current = setTimeout(() => {
+      longPressed.current = true;
+      setUnverifyOpen(true);
+    }, LONG_PRESS_MS);
+  }
+  function handlePointerEnd() {
+    clearPress();
+  }
+  // Long-press handlers attached only on verified+onUnverify rows.
+  const pressHandlers = canLongPressUnverify
+    ? {
+        onPointerDown: handlePointerDown,
+        onPointerUp: handlePointerEnd,
+        onPointerLeave: handlePointerEnd,
+        onPointerCancel: handlePointerEnd,
+        onContextMenu: (e: ReactMouseEvent) => e.preventDefault(),
+      }
+    : {};
+
   return (
-    <div className="border border-[var(--color-border-strong)] bg-[var(--color-bg)]">
+    <div
+      className="border border-[var(--color-border-strong)] bg-[var(--color-bg)]"
+      {...pressHandlers}
+    >
       {/* Header — 3 columns: identity (code + date) · amount (vertically
           centered) · action(s). Tap-on-body wraps identity + amount so the
           whole tappable region opens the voucher; action buttons live in
@@ -171,11 +217,18 @@ export function VoucherRow({
       <div className="flex items-center gap-2 border-t border-[var(--color-border)] px-3 py-2">
         {verified ? (
           <span
-            className="inline-flex h-6 w-6 shrink-0 items-center justify-center border border-[var(--color-border-strong)] bg-[var(--color-accent)] text-[var(--color-accent-ink)]"
+            className="inline-flex shrink-0 items-center gap-1 border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-1.5 py-0.5 text-[var(--color-accent-ink)]"
             aria-label={`Voucher ${voucher.code} is verified`}
-            title="Verified"
+            title={
+              canLongPressUnverify
+                ? "Verified · long-press to mark unverified"
+                : "Verified"
+            }
           >
             <Check size={12} />
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em]">
+              Verified
+            </span>
           </span>
         ) : onToggleVerify && !readOnly ? (
           <button
@@ -234,6 +287,43 @@ export function VoucherRow({
               className="h-10 border border-[var(--color-destructive)] bg-[var(--color-destructive)] px-4 text-sm font-semibold text-white"
             >
               Delete
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={unverifyOpen} onOpenChange={setUnverifyOpen}>
+        <DialogContent
+          showCloseButton={false}
+          className="border border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)]"
+        >
+          <DialogHeader>
+            <DialogTitle className="font-display">
+              Mark as unverified?
+            </DialogTitle>
+            <DialogDescription className="text-[var(--color-text-muted)]">
+              VCH #{voucher.code} · ₹{formatINR(voucher.total)}. It returns to
+              the unverified list and can be edited again.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setUnverifyOpen(false)}
+              className="h-10 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-4 text-sm font-semibold text-[var(--color-text)]"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setUnverifyOpen(false);
+                onUnverify?.();
+              }}
+              className="flex h-10 items-center gap-2 border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-4 text-sm font-semibold text-[var(--color-accent-ink)]"
+            >
+              <RotateCcw size={14} />
+              Mark unverified
             </button>
           </DialogFooter>
         </DialogContent>

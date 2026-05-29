@@ -20,6 +20,7 @@ import {
   useAllFunds,
   useAllSpends,
   useAllVouchers,
+  unverifyVoucher,
   verifyVoucher,
 } from "@/hooks/useData";
 import { useNavStore } from "@/hooks/useNavStore";
@@ -399,9 +400,17 @@ export default function RecordsScreen() {
                   <div className="flex flex-col gap-2">
                     {list.map((v) =>
                       v.verified ? (
-                        // Verified rows are immutable history — show, no edit /
-                        // delete / unverify. VoucherRow auto-locks too.
-                        <VoucherRow key={v.id} voucher={v} readOnly />
+                        // Verified rows are read-only EXCEPT a long-press
+                        // revert-to-unverified escape hatch.
+                        <VoucherRow
+                          key={v.id}
+                          voucher={v}
+                          readOnly
+                          onUnverify={() => {
+                            if (!user) return;
+                            void unverifyVoucher(user.uid, v.id);
+                          }}
+                        />
                       ) : (
                         <VoucherRow
                           key={v.id}
