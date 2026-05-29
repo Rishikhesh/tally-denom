@@ -1,4 +1,4 @@
-import { ChevronLeft, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronLeft, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { DenomLine, Loader } from "@/components";
 import {
@@ -30,18 +30,23 @@ function formatINR(n: number): string {
 
 interface RowProps {
   entry: LedgerEntry;
-  onEdit: () => void;
+  onOpen: () => void;
   onDelete: () => void;
 }
 
-function EntryRow({ entry, onEdit, onDelete }: RowProps) {
+function EntryRow({ entry, onOpen, onDelete }: RowProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const isIn = entry.kind === "in";
 
   return (
     <div className="border border-[var(--color-border-strong)] bg-[var(--color-bg)]">
       <div className="flex items-stretch">
-        <div className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2">
+        {/* Body tap → read-only detail (edit from there). */}
+        <button
+          type="button"
+          onClick={onOpen}
+          className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left active:bg-[var(--color-surface)]"
+        >
           <span
             className={
               isIn
@@ -63,22 +68,14 @@ function EntryRow({ entry, onEdit, onDelete }: RowProps) {
           <span className="shrink-0 font-mono text-sm tabular-nums text-[var(--color-text)]">
             ₹{formatINR(entry.amount)}
           </span>
-        </div>
+        </button>
 
         <div className="flex shrink-0 items-stretch border-l border-[var(--color-border-strong)]">
           <button
             type="button"
-            onClick={onEdit}
-            aria-label="Edit entry"
-            className="flex h-full min-h-10 w-10 items-center justify-center bg-[var(--color-bg)] text-[var(--color-text)] active:bg-[var(--color-surface)]"
-          >
-            <Pencil size={16} />
-          </button>
-          <button
-            type="button"
             onClick={() => setConfirmOpen(true)}
             aria-label="Delete entry"
-            className="flex h-full min-h-10 w-10 items-center justify-center border-l border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-destructive)] active:bg-[var(--color-surface)]"
+            className="flex h-full min-h-10 w-10 items-center justify-center bg-[var(--color-bg)] text-[var(--color-destructive)] active:bg-[var(--color-surface)]"
           >
             <Trash2 size={16} />
           </button>
@@ -160,12 +157,17 @@ export default function LedgerDetailScreen() {
     useNavStore.getState().goBack();
   }
 
-  function openEditor(entryId?: string) {
+  function openEditor() {
     if (!ledgerId) return;
-    useNavStore.getState().go({
-      name: "ledger-entry-editor",
-      params: { ledgerId, ...(entryId ? { entryId } : {}) },
-    });
+    useNavStore
+      .getState()
+      .go({ name: "ledger-entry-editor", params: { ledgerId } });
+  }
+  function openDetail(entryId: string) {
+    if (!ledgerId) return;
+    useNavStore
+      .getState()
+      .go({ name: "ledger-entry-detail", params: { ledgerId, entryId } });
   }
 
   function onDelete(entryId: string) {
@@ -311,7 +313,7 @@ export default function LedgerDetailScreen() {
               <EntryRow
                 key={e.id}
                 entry={e}
-                onEdit={() => openEditor(e.id)}
+                onOpen={() => openDetail(e.id)}
                 onDelete={() => onDelete(e.id)}
               />
             ))}

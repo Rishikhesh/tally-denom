@@ -21,7 +21,6 @@ import {
   type Exchange,
   useActivity,
   useAllExchanges,
-  useAllFunds,
   useAllLedgerEntries,
   useAllSpends,
   useAllVouchers,
@@ -34,8 +33,6 @@ import { signOut } from "@/lib/auth";
 import {
   denomInventory,
   netBalance,
-  sumFundDenoms,
-  sumFunds,
   sumLedgerDenoms,
   sumLedgerIn,
   sumLedgerOut,
@@ -45,13 +42,11 @@ import {
   sumVerified,
   sumVoucherDenoms,
 } from "@/lib/balances";
-import { DENOMS, type DenomCounts, emptyDenoms } from "@/lib/denoms";
 
 export default function HomeScreen() {
   const { user, loading } = useAuth();
   const vouchers = useAllVouchers();
   const spends = useAllSpends();
-  const funds = useAllFunds();
   const ledgerEntries = useAllLedgerEntries();
   const exchanges = useAllExchanges();
   const routes = useRoutes();
@@ -61,23 +56,18 @@ export default function HomeScreen() {
   const [activeExchange, setActiveExchange] = useState<Exchange | null>(null);
   const { theme, toggleTheme } = useTheme();
 
-  // Direct funds count as verified inflows — they fold into the VERIFIED
-  // bucket for totals + denom maps. No separate Funds row in the hero.
-  const verified = sumVerified(vouchers) + sumFunds(funds);
+  const verified = sumVerified(vouchers);
   const unverified = sumUnverified(vouchers);
   const ledger = sumLedgerIn(ledgerEntries) - sumLedgerOut(ledgerEntries);
   const spent = sumSpends(spends);
   // Exchanges contribute 0 to net by rule; no need to pass through.
-  const net = netBalance(vouchers, spends, funds, ledgerEntries);
+  const net = netBalance(vouchers, spends, [], ledgerEntries);
 
   // Per-bucket denom maps for the hero.
-  const verifiedDenoms = useMemo(() => {
-    const out: DenomCounts = emptyDenoms();
-    const fromVouchers = sumVoucherDenoms(vouchers.filter((v) => v.verified));
-    const fromFunds = sumFundDenoms(funds);
-    for (const d of DENOMS) out[d] = fromVouchers[d] + fromFunds[d];
-    return out;
-  }, [vouchers, funds]);
+  const verifiedDenoms = useMemo(
+    () => sumVoucherDenoms(vouchers.filter((v) => v.verified)),
+    [vouchers],
+  );
   const unverifiedDenoms = useMemo(
     () => sumVoucherDenoms(vouchers.filter((v) => !v.verified)),
     [vouchers],
@@ -88,8 +78,8 @@ export default function HomeScreen() {
   );
   const spentDenoms = useMemo(() => sumSpendDenoms(spends), [spends]);
   const netDenoms = useMemo(
-    () => denomInventory(vouchers, spends, funds, ledgerEntries, exchanges),
-    [vouchers, spends, funds, ledgerEntries, exchanges],
+    () => denomInventory(vouchers, spends, [], ledgerEntries, exchanges),
+    [vouchers, spends, ledgerEntries, exchanges],
   );
 
   // Lookup maps used to surface a context label on each activity row.
@@ -146,7 +136,8 @@ export default function HomeScreen() {
             a.type !== "voucher.verify" &&
             a.type !== "voucher.unverify" &&
             a.type !== "route.create" &&
-            a.type !== "route.delete",
+            a.type !== "route.delete" &&
+            !a.type.startsWith("fund."),
         )
         .slice(0, 5),
     [recent],
@@ -159,17 +150,22 @@ export default function HomeScreen() {
     const nav = useNavStore.getState();
     if (activity.type.startsWith("voucher.") && activity.routeId) {
       nav.go({
-        name: "voucher-editor",
+        name: "voucher-detail",
         params: { routeId: activity.routeId, voucherId: activity.refId },
       });
       return;
     }
     if (activity.type.startsWith("spend.")) {
-      nav.go({ name: "spend-editor", params: { spendId: activity.refId } });
-      return;
-    }
-    if (activity.type.startsWith("fund.")) {
-      nav.go({ name: "fund-editor", params: { fundId: activity.refId } });
+      const vid =
+        typeof activity.meta?.voucherId === "string"
+          ? (activity.meta.voucherId as string)
+          : null;
+      if (vid && activity.routeId) {
+        nav.go({
+          name: "voucher-detail",
+          params: { routeId: activity.routeId, voucherId: vid },
+        });
+      }
       return;
     }
     if (activity.type.startsWith("route.") && activity.routeId) {
@@ -187,7 +183,7 @@ export default function HomeScreen() {
           : null;
       if (ledgerId) {
         nav.go({
-          name: "ledger-entry-editor",
+          name: "ledger-entry-detail",
           params: { ledgerId, entryId: activity.refId },
         });
       }

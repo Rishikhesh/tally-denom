@@ -3,9 +3,9 @@ import { ChevronLeft, Plus, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { DateRangeSheet, DenomTally, Loader, VoucherRow } from "@/components";
 import { useAuth } from "@/hooks/useAuth";
-import { useRoute, useVouchersByRoute } from "@/hooks/useData";
+import { useAllSpends, useRoute, useVouchersByRoute } from "@/hooks/useData";
 import { useNavStore } from "@/hooks/useNavStore";
-import { denomInventory, routeTotals } from "@/lib/balances";
+import { denomInventory, routeTotals, spentByVoucher } from "@/lib/balances";
 import { dateRangePresets, formatDate } from "@/lib/date";
 import { DENOMS } from "@/lib/denoms";
 
@@ -67,6 +67,8 @@ export default function RouteScreen() {
 
   const route = useRoute(routeId);
   const allVouchersInRoute = useVouchersByRoute(routeId, range);
+  const allSpends = useAllSpends();
+  const spentMap = useMemo(() => spentByVoucher(allSpends), [allSpends]);
 
   // Fuzzy search across code + date + total. Threshold 0.4 = forgiving but
   // not noise. Rebuilt only when the underlying voucher list changes.
@@ -281,15 +283,12 @@ export default function RouteScreen() {
               <VoucherRow
                 key={v.id}
                 voucher={v}
+                spentAmount={spentMap.get(v.id)?.amount ?? 0}
+                spentDenoms={spentMap.get(v.id)?.denoms}
+                // Tap → read-only detail; all actions live there.
                 onRowTap={() =>
                   useNavStore.getState().go({
-                    name: "voucher-editor",
-                    params: { routeId, voucherId: v.id },
-                  })
-                }
-                onAddSpend={() =>
-                  useNavStore.getState().go({
-                    name: "spend-editor",
+                    name: "voucher-detail",
                     params: { routeId, voucherId: v.id },
                   })
                 }

@@ -23,8 +23,11 @@ interface Spend {
 
 interface Props {
   spend: Spend;
-  onEdit: () => void;
-  onDelete: () => void;
+  /** Omit both to render a read-only row (no action column). */
+  onEdit?: () => void;
+  onDelete?: () => void;
+  /** Context line shown under the note, e.g. `VCH #A12 · palladam`. */
+  contextLabel?: string;
 }
 
 function formatINR(n: number): string {
@@ -34,7 +37,7 @@ function formatINR(n: number): string {
   });
 }
 
-export function SpendRow({ spend, onEdit, onDelete }: Props) {
+export function SpendRow({ spend, onEdit, onDelete, contextLabel }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -55,37 +58,48 @@ export function SpendRow({ spend, onEdit, onDelete }: Props) {
               ₹{formatINR(spend.amount)}
             </span>
           </div>
-          <div className="flex min-w-0 items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-1.5">
             <span className="shrink-0 font-mono text-xs tabular-nums text-[var(--color-text-muted)]">
               {formatDate(spend.txDate)}
             </span>
+            {contextLabel && (
+              <span className="min-w-0 truncate font-mono text-xs text-[var(--color-text-muted)]">
+                · {contextLabel}
+              </span>
+            )}
           </div>
         </button>
 
-        <div className="flex shrink-0 items-stretch border-l border-[var(--color-border-strong)]">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit();
-            }}
-            aria-label={`Edit spend ${spend.note}`}
-            className="flex h-full min-h-10 w-10 items-center justify-center bg-[var(--color-bg)] text-[var(--color-text)] active:bg-[var(--color-surface)]"
-          >
-            <Pencil size={16} />
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setConfirmOpen(true);
-            }}
-            aria-label={`Delete spend ${spend.note}`}
-            className="flex h-full min-h-10 w-10 items-center justify-center border-l border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-destructive)] active:bg-[var(--color-surface)]"
-          >
-            <Trash2 size={16} />
-          </button>
-        </div>
+        {(onEdit || onDelete) && (
+          <div className="flex shrink-0 items-stretch border-l border-[var(--color-border-strong)]">
+            {onEdit && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit();
+                }}
+                aria-label={`Edit spend ${spend.note}`}
+                className="flex h-full min-h-10 w-10 items-center justify-center bg-[var(--color-bg)] text-[var(--color-text)] active:bg-[var(--color-surface)]"
+              >
+                <Pencil size={16} />
+              </button>
+            )}
+            {onDelete && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setConfirmOpen(true);
+                }}
+                aria-label={`Delete spend ${spend.note}`}
+                className="flex h-full min-h-10 w-10 items-center justify-center border-l border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-destructive)] active:bg-[var(--color-surface)]"
+              >
+                <Trash2 size={16} />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {expanded && (
@@ -118,7 +132,7 @@ export function SpendRow({ spend, onEdit, onDelete }: Props) {
               type="button"
               onClick={() => {
                 setConfirmOpen(false);
-                onDelete();
+                onDelete?.();
               }}
               className="h-10 border border-[var(--color-destructive)] bg-[var(--color-destructive)] px-4 text-sm font-semibold text-white"
             >

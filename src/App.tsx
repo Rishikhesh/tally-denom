@@ -19,11 +19,13 @@ const RouteScreen = lazy(() => import("@/screens/RouteScreen"));
 const VoucherEditorScreen = lazy(() => import("@/screens/VoucherEditorScreen"));
 const VoucherDetailScreen = lazy(() => import("@/screens/VoucherDetailScreen"));
 const SpendEditorScreen = lazy(() => import("@/screens/SpendEditorScreen"));
-const FundEditorScreen = lazy(() => import("@/screens/FundEditorScreen"));
 const LedgerScreen = lazy(() => import("@/screens/LedgerScreen"));
 const LedgerDetailScreen = lazy(() => import("@/screens/LedgerDetailScreen"));
 const LedgerEntryEditorScreen = lazy(
   () => import("@/screens/LedgerEntryEditorScreen"),
+);
+const LedgerEntryDetailScreen = lazy(
+  () => import("@/screens/LedgerEntryDetailScreen"),
 );
 const ExchangeEditorScreen = lazy(
   () => import("@/screens/ExchangeEditorScreen"),
@@ -33,7 +35,6 @@ const SignInScreen = lazy(() => import("@/screens/SignInScreen"));
 const FULLSCREEN_STACK_NAMES = new Set([
   "voucher-editor",
   "spend-editor",
-  "fund-editor",
   "ledger-entry-editor",
   "exchange-editor",
 ]);
@@ -95,12 +96,12 @@ export default function App() {
           return <VoucherDetailScreen />;
         case "spend-editor":
           return <SpendEditorScreen />;
-        case "fund-editor":
-          return <FundEditorScreen />;
         case "ledger-detail":
           return <LedgerDetailScreen />;
         case "ledger-entry-editor":
           return <LedgerEntryEditorScreen />;
+        case "ledger-entry-detail":
+          return <LedgerEntryDetailScreen />;
         case "exchange-editor":
           return <ExchangeEditorScreen />;
         case "activity":

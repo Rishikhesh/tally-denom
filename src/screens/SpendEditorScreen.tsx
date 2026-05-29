@@ -180,6 +180,42 @@ export default function SpendEditorScreen() {
     );
   }
 
+  // Verified vouchers are view-only — no spends can be added or edited.
+  if (voucher?.verified) {
+    return (
+      <div className="flex h-full flex-col">
+        <header className="flex items-center gap-3 border-b border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 py-3">
+          <button
+            type="button"
+            onClick={goBack}
+            aria-label="Back"
+            className="flex h-9 w-9 items-center justify-center border border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)] active:bg-[var(--color-surface)]"
+          >
+            <ChevronLeft size={18} />
+          </button>
+          <div className="flex flex-col">
+            <div className="eyebrow">03 / SPEND</div>
+            <h1 className="font-display text-lg">Locked</h1>
+          </div>
+        </header>
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+          <div className="eyebrow">LOCKED</div>
+          <p className="text-sm text-[var(--color-text-muted)]">
+            This voucher is verified and view-only. Spends can't be added or
+            edited. Mark it unverified first if you need to change it.
+          </p>
+          <button
+            type="button"
+            onClick={goBack}
+            className="mt-2 h-10 border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-4 text-sm font-bold uppercase tracking-[0.12em] text-[var(--color-accent-ink)]"
+          >
+            Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center gap-3 border-b border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 py-3">

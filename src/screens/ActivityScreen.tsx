@@ -22,11 +22,10 @@ import { useNavStore } from "@/hooks/useNavStore";
 import type { ActivityType } from "@/lib/activity";
 import { dateRangePresets, formatDate } from "@/lib/date";
 
-type TypeKey = "voucher" | "spend" | "fund" | "route" | "ledger" | "exchange";
+type TypeKey = "voucher" | "spend" | "route" | "ledger" | "exchange";
 const ALL_TYPE_KEYS: TypeKey[] = [
   "voucher",
   "spend",
-  "fund",
   "ledger",
   "exchange",
   "route",
@@ -34,7 +33,6 @@ const ALL_TYPE_KEYS: TypeKey[] = [
 const TYPE_LABEL: Record<TypeKey, string> = {
   voucher: "Vouchers",
   spend: "Spends",
-  fund: "Inflow",
   ledger: "Ledger",
   exchange: "Exchange",
   route: "Routes",
@@ -54,11 +52,6 @@ const ALL_SPEND: ActivityType[] = [
   "spend.create",
   "spend.edit",
   "spend.delete",
-];
-const ALL_FUND: ActivityType[] = [
-  "fund.create",
-  "fund.edit",
-  "fund.delete",
 ];
 const ALL_ROUTE: ActivityType[] = ["route.create", "route.delete"];
 const ALL_LEDGER: ActivityType[] = [
@@ -137,7 +130,6 @@ export default function ActivityScreen() {
     const out: ActivityType[] = [];
     if (selectedTypes.has("voucher")) out.push(...ALL_VOUCHER);
     if (selectedTypes.has("spend")) out.push(...ALL_SPEND);
-    if (selectedTypes.has("fund")) out.push(...ALL_FUND);
     if (selectedTypes.has("route")) out.push(...ALL_ROUTE);
     if (selectedTypes.has("ledger")) out.push(...ALL_LEDGER);
     if (selectedTypes.has("exchange")) out.push(...ALL_EXCHANGE);
@@ -178,7 +170,10 @@ export default function ActivityScreen() {
   const activity = useMemo(
     () =>
       rawActivity.filter(
-        (a) => a.type !== "voucher.verify" && a.type !== "voucher.unverify",
+        (a) =>
+          a.type !== "voucher.verify" &&
+          a.type !== "voucher.unverify" &&
+          !a.type.startsWith("fund."),
       ),
     [rawActivity],
   );
@@ -213,17 +208,23 @@ export default function ActivityScreen() {
     const nav = useNavStore.getState();
     if (a.type.startsWith("voucher.") && a.routeId) {
       nav.go({
-        name: "voucher-editor",
+        name: "voucher-detail",
         params: { routeId: a.routeId, voucherId: a.refId },
       });
       return;
     }
     if (a.type.startsWith("spend.")) {
-      nav.go({ name: "spend-editor", params: { spendId: a.refId } });
-      return;
-    }
-    if (a.type.startsWith("fund.")) {
-      nav.go({ name: "fund-editor", params: { fundId: a.refId } });
+      // Spends live inside their voucher — open the voucher detail (read).
+      const vid =
+        typeof a.meta?.voucherId === "string"
+          ? (a.meta.voucherId as string)
+          : null;
+      if (vid && a.routeId) {
+        nav.go({
+          name: "voucher-detail",
+          params: { routeId: a.routeId, voucherId: vid },
+        });
+      }
       return;
     }
     if (a.type.startsWith("route.") && a.routeId) {
@@ -245,7 +246,7 @@ export default function ActivityScreen() {
           : null;
       if (ledgerId) {
         nav.go({
-          name: "ledger-entry-editor",
+          name: "ledger-entry-detail",
           params: { ledgerId, entryId: a.refId },
         });
       }

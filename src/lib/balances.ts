@@ -114,6 +114,25 @@ export function sumSpendDenoms(ss: Spend[]): DenomCounts {
   return out;
 }
 
+/**
+ * Per-voucher spent totals. Keyed by `voucherId`, each value is the summed
+ * spend amount + denom counts attached to that voucher. Used to display a
+ * voucher's *net* balance (collected total − spent) in lists / detail.
+ */
+export function spentByVoucher(
+  spends: { voucherId: string; amount: number; denoms: DenomCounts }[],
+): Map<string, { amount: number; denoms: DenomCounts }> {
+  const map = new Map<string, { amount: number; denoms: DenomCounts }>();
+  for (const s of spends) {
+    if (!s.voucherId) continue;
+    const cur = map.get(s.voucherId) ?? { amount: 0, denoms: emptyDenoms() };
+    cur.amount += s.amount;
+    for (const d of DENOMS) cur.denoms[d] += s.denoms[d];
+    map.set(s.voucherId, cur);
+  }
+  return map;
+}
+
 /** Sum denom counts across the supplied funds. */
 export function sumFundDenoms(fs: Fund[]): DenomCounts {
   const out = emptyDenoms();

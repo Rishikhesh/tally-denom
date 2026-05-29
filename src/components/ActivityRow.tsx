@@ -98,6 +98,13 @@ export function ActivityRow({ activity, onTap, contextLabel }: Props) {
         : "in"
       : null;
 
+  // Type chip so each row states what it is (the note alone is ambiguous).
+  const typeTag = activity.type.startsWith("spend.")
+    ? "SPEND"
+    : activity.type.startsWith("exchange.")
+      ? "EXCHANGE"
+      : null;
+
   const body = (
     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
       <span className="flex min-w-0 items-baseline gap-1.5">
@@ -115,6 +122,11 @@ export function ActivityRow({ activity, onTap, contextLabel }: Props) {
             </span>
           )}
         </span>
+        {typeTag && (
+          <span className="shrink-0 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--color-text-muted)]">
+            {typeTag}
+          </span>
+        )}
         {ledgerKind && (
           <span
             className={
