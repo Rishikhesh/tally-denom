@@ -1,14 +1,14 @@
 import { ChevronLeft } from "lucide-react";
 import { useState } from "react";
 import { DatePickerSheet, DenomRow, Loader } from "@/components";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import {
   createVoucher,
   editVoucher,
   useAllVouchers,
+  useRoute,
 } from "@/hooks/useData";
+import { genVoucherRef } from "@/lib/voucher";
 import { useNavStore } from "@/hooks/useNavStore";
 import { formatDate, todayInputDate } from "@/lib/date";
 import {
@@ -42,12 +42,15 @@ export default function VoucherEditorScreen() {
   const existing = voucherId
     ? allVouchers.find((v) => v.id === voucherId) ?? null
     : null;
+  const route = useRoute(routeId);
 
   const [hydratedId, setHydratedId] = useState<string | null>(
     voucherId ? null : "__new__",
   );
 
-  const [code, setCode] = useState("");
+  // Dummy auto-number assigned at creation, prefixed with the route name. The
+  // real number is captured when the voucher is verified (actualCode).
+  const [code, setCode] = useState<string>("");
   const [denoms, setDenoms] = useState<DenomCounts>(emptyDenoms());
   const [txDate, setTxDate] = useState<string>(todayInputDate());
   const [dateSheetOpen, setDateSheetOpen] = useState(false);
@@ -59,6 +62,10 @@ export default function VoucherEditorScreen() {
     setDenoms({ ...existing.denoms });
     setTxDate(existing.txDate || todayInputDate());
     setHydratedId(voucherId);
+  }
+  // New voucher: generate the dummy ref once the route name is loaded.
+  if (!voucherId && route && !code) {
+    setCode(genVoucherRef(route.name));
   }
   const hydrated = hydratedId !== null;
   const isEditing = !!voucherId;
@@ -81,9 +88,7 @@ export default function VoucherEditorScreen() {
   // user guessing why the CTA is grey.
   let disabledReason: string | null = null;
   if (!saving) {
-    if (!code.trim()) disabledReason = "Enter a voucher code to save";
-    else if (totalNumeric <= 0)
-      disabledReason = "Add at least one note or coin";
+    if (totalNumeric <= 0) disabledReason = "Add at least one note or coin";
     else if (!denomsOk)
       disabledReason = "Denomination counts must be whole numbers ≥ 0";
     else if (!dateValid) disabledReason = "Pick a valid date";
@@ -190,22 +195,16 @@ export default function VoucherEditorScreen() {
         </div>
       </header>
 
-      {/* Fixed top: CODE + DATE + TOTAL. Always visible while user scrolls
-          the denominations. */}
+      {/* Fixed top: REF (auto dummy) + DATE + TOTAL. Always visible while the
+          user scrolls denominations. The real voucher number is entered at
+          verification time. */}
       <div className="border-b border-[var(--color-border)] px-5 py-3">
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-1">
-            <Label htmlFor="vch-code" className="eyebrow">
-              CODE
-            </Label>
-            <Input
-              id="vch-code"
-              type="text"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="A123"
-              className="h-10 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 text-base text-[var(--color-text)] shadow-none focus-visible:ring-0"
-            />
+            <span className="eyebrow">REF #</span>
+            <div className="flex h-10 items-center border border-[var(--color-border)] bg-[var(--color-surface)] px-3 font-mono text-sm text-[var(--color-text-muted)]">
+              {code}
+            </div>
           </div>
 
           <div className="flex flex-col gap-1">

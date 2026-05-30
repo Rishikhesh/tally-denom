@@ -84,7 +84,7 @@ export default function EntryScreen() {
 
   const voucherCodeMap = useMemo(() => {
     const m = new Map<string, string>();
-    for (const v of vouchers) m.set(v.id, v.code);
+    for (const v of vouchers) m.set(v.id, v.actualCode ?? v.code);
     return m;
   }, [vouchers]);
 
@@ -224,7 +224,7 @@ export default function EntryScreen() {
                   <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                     <span className="flex min-w-0 items-baseline gap-1.5">
                       <span className="min-w-0 truncate font-display text-base font-medium text-[var(--color-text)]">
-                        VCH #{it.v.code}
+                        VCH #{it.v.actualCode ?? it.v.code}
                       </span>
                       <span className="shrink-0 font-normal text-[var(--color-text-muted)]">
                         · {routeNameMap.get(it.v.routeId) ?? "Route"}

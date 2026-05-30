@@ -90,7 +90,7 @@ export default function HomeScreen() {
   }, [routes]);
   const voucherCodeMap = useMemo(() => {
     const m = new Map<string, string>();
-    for (const v of vouchers) m.set(v.id, v.code);
+    for (const v of vouchers) m.set(v.id, v.actualCode ?? v.code);
     return m;
   }, [vouchers]);
   const ledgerNameMap = useMemo(() => {
@@ -98,6 +98,19 @@ export default function HomeScreen() {
     for (const l of ledgers) m.set(l.id, l.name);
     return m;
   }, [ledgers]);
+
+  // Map voucher id → live display code (real number once verified, else dummy
+  // ref). Activity titles froze the code at create time — override with this.
+  const voucherDisplayMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const v of vouchers) m.set(v.id, v.actualCode ?? v.code);
+    return m;
+  }, [vouchers]);
+  function titleOverrideFor(a: Activity): string | undefined {
+    if (!a.type.startsWith("voucher.")) return undefined;
+    const code = voucherDisplayMap.get(a.refId);
+    return code ? `VCH #${code}` : undefined;
+  }
 
   function contextLabelFor(a: Activity): string | undefined {
     if (a.type.startsWith("voucher.") || a.type.startsWith("route.")) {
@@ -133,7 +146,6 @@ export default function HomeScreen() {
       recent
         .filter(
           (a) =>
-            a.type !== "voucher.verify" &&
             a.type !== "voucher.unverify" &&
             a.type !== "route.create" &&
             a.type !== "route.delete" &&
@@ -280,6 +292,7 @@ export default function HomeScreen() {
                   activity={a}
                   onTap={() => jumpToActivity(a)}
                   contextLabel={contextLabelFor(a)}
+                  titleOverride={titleOverrideFor(a)}
                 />
               ))}
             </div>

@@ -90,7 +90,7 @@ export default function ActivityScreen() {
   }, [routes]);
   const voucherCodeMap = useMemo(() => {
     const m = new Map<string, string>();
-    for (const v of vouchers) m.set(v.id, v.code);
+    for (const v of vouchers) m.set(v.id, v.actualCode ?? v.code);
     return m;
   }, [vouchers]);
   const ledgerNameMap = useMemo(() => {
@@ -98,6 +98,17 @@ export default function ActivityScreen() {
     for (const l of ledgers) m.set(l.id, l.name);
     return m;
   }, [ledgers]);
+
+  const voucherDisplayMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const v of vouchers) m.set(v.id, v.actualCode ?? v.code);
+    return m;
+  }, [vouchers]);
+  function titleOverrideFor(a: Activity): string | undefined {
+    if (!a.type.startsWith("voucher.")) return undefined;
+    const code = voucherDisplayMap.get(a.refId);
+    return code ? `VCH #${code}` : undefined;
+  }
 
   function contextLabelFor(a: Activity): string | undefined {
     if (a.type.startsWith("voucher.") || a.type.startsWith("route.")) {
@@ -164,16 +175,12 @@ export default function ActivityScreen() {
     to: range.to,
   });
 
-  // Hide voucher.verify / voucher.unverify from the visible feed — they're
-  // logged for audit but the user only needs the underlying state, surfaced
-  // via the row-level VERIFY CTA on `voucher.create`.
+  // Verify events stay (they carry the excess/shortage reconciliation).
+  // Unverify + inflow events are hidden.
   const activity = useMemo(
     () =>
       rawActivity.filter(
-        (a) =>
-          a.type !== "voucher.verify" &&
-          a.type !== "voucher.unverify" &&
-          !a.type.startsWith("fund."),
+        (a) => a.type !== "voucher.unverify" && !a.type.startsWith("fund."),
       ),
     [rawActivity],
   );
@@ -364,6 +371,7 @@ export default function ActivityScreen() {
                 activity={a}
                 onTap={() => onTap(a)}
                 contextLabel={contextLabelFor(a)}
+                titleOverride={titleOverrideFor(a)}
               />
             ))}
             {hasMore && (

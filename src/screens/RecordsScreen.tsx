@@ -21,6 +21,7 @@ import {
 import { useNavStore } from "@/hooks/useNavStore";
 import { spentByVoucher } from "@/lib/balances";
 import { formatDate } from "@/lib/date";
+import { verifyStatusOf } from "@/lib/voucher";
 
 type SegId = "verified" | "unverified" | "spends" | "exchanges";
 
@@ -52,11 +53,15 @@ export default function RecordsScreen() {
     setSegState(next);
   };
   const [query, setQuery] = useState("");
+  // Verified sub-filter by reconciliation status.
+  const [vFilter, setVFilter] = useState<
+    "all" | "tallied" | "excess" | "shortage"
+  >("all");
 
   // Lookups so each spend can show its parent voucher + route.
   const voucherCodeMap = useMemo(() => {
     const m = new Map<string, string>();
-    for (const v of vouchers) m.set(v.id, v.code);
+    for (const v of vouchers) m.set(v.id, v.actualCode ?? v.code);
     return m;
   }, [vouchers]);
   const routeNameMap = useMemo(() => {
@@ -159,14 +164,6 @@ export default function RecordsScreen() {
     return fuseExchanges.search(q).map((r) => r.item.item);
   }, [q, exchanges, fuseExchanges]);
 
-  const verifiedTotal = useMemo(
-    () => filteredVerified.reduce((a, v) => a + v.total, 0),
-    [filteredVerified],
-  );
-  const unverifiedTotal = useMemo(
-    () => filteredUnverified.reduce((a, v) => a + v.total, 0),
-    [filteredUnverified],
-  );
   const spendsTotal = useMemo(
     () => filteredSpends.reduce((a, s) => a + s.amount, 0),
     [filteredSpends],
@@ -334,13 +331,43 @@ export default function RecordsScreen() {
           </section>
         ) : (
           (() => {
-            const list =
+            const baseList =
               seg === "verified" ? filteredVerified : filteredUnverified;
-            const total =
-              seg === "verified" ? verifiedTotal : unverifiedTotal;
+            const list =
+              seg === "verified" && vFilter !== "all"
+                ? baseList.filter(
+                    (v) => verifyStatusOf(v.verifyAmount, v.total) === vFilter,
+                  )
+                : baseList;
+            const total = list.reduce((a, v) => a + v.total, 0);
             const noun = seg === "verified" ? "verified" : "unverified";
             return (
               <section className="flex flex-col gap-3">
+                {seg === "verified" && (
+                  <div className="flex flex-wrap gap-2">
+                    {(
+                      [
+                        { id: "all", label: "All" },
+                        { id: "tallied", label: "Tallied" },
+                        { id: "excess", label: "Excess" },
+                        { id: "shortage", label: "Shortage" },
+                      ] as const
+                    ).map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setVFilter(c.id)}
+                        className={
+                          vFilter === c.id
+                            ? "border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--color-accent-ink)]"
+                            : "border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--color-text)]"
+                        }
+                      >
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <div className="flex items-baseline justify-between gap-2 border-b border-[var(--color-border)] pb-2">
                   <span className="font-mono text-xs uppercase tracking-[0.16em] tabular-nums text-[var(--color-text-muted)]">
                     {list.length} {noun}

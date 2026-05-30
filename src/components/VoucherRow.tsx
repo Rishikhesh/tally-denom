@@ -2,13 +2,17 @@ import { Check } from "lucide-react";
 import { DenomLine } from "@/components/DenomLine";
 import { formatDate } from "@/lib/date";
 import { DENOMS, type DenomCounts } from "@/lib/denoms";
+import { cn } from "@/lib/utils";
+import { verifyStatusOf, verifyTone, voucherDisplayCode } from "@/lib/voucher";
 
 interface Voucher {
   id: string;
   code: string;
+  actualCode?: string | null;
   total: number;
   denoms: DenomCounts;
   verified: boolean;
+  verifyAmount?: number | null;
   txDate: string;
 }
 
@@ -43,6 +47,8 @@ export function VoucherRow({
       ) as DenomCounts)
     : voucher.denoms;
   const verified = voucher.verified;
+  const vStatus = verifyStatusOf(voucher.verifyAmount, voucher.total);
+  const vTone = verifyTone(vStatus);
 
   const Wrapper = onRowTap ? "button" : "div";
 
@@ -61,7 +67,7 @@ export function VoucherRow({
       <div className="flex items-center gap-3 px-3 py-2">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="min-w-0 truncate font-display text-base font-medium text-[var(--color-text)]">
-            VCH #{voucher.code}
+            VCH #{voucherDisplayCode(voucher)}
           </span>
           <span className="font-mono text-xs tabular-nums text-[var(--color-text-muted)]">
             {formatDate(voucher.txDate)}
@@ -90,6 +96,22 @@ export function VoucherRow({
             aria-label={`Voucher ${voucher.code} is unverified`}
           >
             UNVERIFIED
+          </span>
+        )}
+
+        {vStatus && (
+          <span
+            className={cn(
+              "inline-flex shrink-0 items-center border bg-[var(--color-bg)] px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.18em]",
+              vTone === "success" &&
+                "border-[var(--color-success)] text-[var(--color-success)]",
+              vTone === "destructive" &&
+                "border-[var(--color-destructive)] text-[var(--color-destructive)]",
+              vTone === "neutral" &&
+                "border-[var(--color-border-strong)] text-[var(--color-text-muted)]",
+            )}
+          >
+            {vStatus}
           </span>
         )}
 

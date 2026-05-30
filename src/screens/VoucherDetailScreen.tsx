@@ -6,9 +6,10 @@ import {
   Plus,
   RotateCcw,
   Trash2,
+  X,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { DenomTally, Loader, SpendRow } from "@/components";
+import { BottomSheet, DenomTally, Loader, SpendRow } from "@/components";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { DENOMS, type DenomCounts, emptyDenoms } from "@/lib/denoms";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -29,6 +31,14 @@ import {
 } from "@/hooks/useData";
 import { useNavStore } from "@/hooks/useNavStore";
 import { formatDate } from "@/lib/date";
+import { cn } from "@/lib/utils";
+import {
+  verifyDiffOf,
+  verifyLabel,
+  verifyStatusOf,
+  verifyTone,
+  voucherDisplayCode,
+} from "@/lib/voucher";
 
 function formatINR(n: number): string {
   return n.toLocaleString("en-IN", {
@@ -57,6 +67,9 @@ export default function VoucherDetailScreen() {
   const spends = useSpendsByVoucher(voucherId);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmUnverify, setConfirmUnverify] = useState(false);
+  const [verifyOpen, setVerifyOpen] = useState(false);
+  const [actualCodeInput, setActualCodeInput] = useState("");
+  const [verifyAmountInput, setVerifyAmountInput] = useState("");
 
   const spentTotal = useMemo(
     () => spends.reduce((a, s) => a + s.amount, 0),
@@ -102,7 +115,12 @@ export default function VoucherDetailScreen() {
   }
   function doVerify() {
     if (!user || !voucherId) return;
-    void verifyVoucher(user.uid, voucherId);
+    const amt = verifyAmountInput.trim() ? Number(verifyAmountInput) : null;
+    void verifyVoucher(user.uid, voucherId, {
+      actualCode: actualCodeInput.trim() || null,
+      verifyAmount: amt != null && Number.isFinite(amt) ? amt : null,
+    });
+    setVerifyOpen(false);
   }
   function doUnverify() {
     if (!user || !voucherId) return;
@@ -123,6 +141,10 @@ export default function VoucherDetailScreen() {
   }
 
   const verified = voucher.verified;
+  const displayCode = voucherDisplayCode(voucher);
+  // Verify reconciliation: counted amount vs collected total.
+  const verifyDiff = verifyDiffOf(voucher.verifyAmount, voucher.total);
+  const verifyStatus = verifyStatusOf(voucher.verifyAmount, voucher.total);
 
   return (
     <div className="relative flex h-full flex-col">
@@ -135,20 +157,23 @@ export default function VoucherDetailScreen() {
         >
           <ChevronLeft size={18} />
         </button>
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <h1 className="truncate font-display text-lg">
-            VCH #{voucher.code}
-          </h1>
-          {verified && (
-            <span
-              className="flex h-6 w-6 shrink-0 items-center justify-center border border-[var(--color-border-strong)] bg-[var(--color-accent)] text-[var(--color-accent-ink)]"
-              aria-label="Verified (locked)"
-              title="Verified records are read-only"
-            >
-              <Lock size={12} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <h1 className="truncate font-display text-lg">VCH #{displayCode}</h1>
+          {voucher.actualCode && (
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-muted)]">
+              ref {voucher.code}
             </span>
           )}
         </div>
+        {verified && (
+          <span
+            className="flex h-7 w-7 shrink-0 items-center justify-center border border-[var(--color-border-strong)] bg-[var(--color-accent)] text-[var(--color-accent-ink)]"
+            aria-label="Verified (locked)"
+            title="Verified records are read-only"
+          >
+            <Lock size={12} />
+          </span>
+        )}
       </header>
 
       {/* Hero block — single net balance (collected − spent). */}
@@ -195,6 +220,31 @@ export default function VoucherDetailScreen() {
           />
         </div>
 
+        {/* Verify reconciliation (data only — not summed anywhere) */}
+        {verifyStatus && (
+          <div className="mt-3 flex items-center justify-between gap-3 border-t border-[var(--color-border)] pt-3">
+            <div className="flex flex-col">
+              <span className="eyebrow">COUNTED</span>
+              <span className="font-mono text-sm tabular-nums text-[var(--color-text)]">
+                ₹{formatINR(voucher.verifyAmount as number)}
+              </span>
+            </div>
+            <span
+              className={cn(
+                "inline-flex items-center border bg-[var(--color-bg)] px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em]",
+                verifyTone(verifyStatus) === "success" &&
+                  "border-[var(--color-success)] text-[var(--color-success)]",
+                verifyTone(verifyStatus) === "destructive" &&
+                  "border-[var(--color-destructive)] text-[var(--color-destructive)]",
+                verifyTone(verifyStatus) === "neutral" &&
+                  "border-[var(--color-border-strong)] text-[var(--color-text-muted)]",
+              )}
+            >
+              {verifyLabel(verifyDiff as number, formatINR)}
+            </span>
+          </div>
+        )}
+
         {/* Actions */}
         <div className="mt-4 flex flex-wrap gap-2">
           {verified ? (
@@ -210,7 +260,11 @@ export default function VoucherDetailScreen() {
             <>
               <button
                 type="button"
-                onClick={doVerify}
+                onClick={() => {
+                  setActualCodeInput("");
+                  setVerifyAmountInput("");
+                  setVerifyOpen(true);
+                }}
                 className="flex h-9 items-center gap-1.5 border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-3 text-xs font-bold uppercase tracking-[0.14em] text-[var(--color-accent-ink)] active:opacity-80"
               >
                 <Check size={14} />
@@ -315,6 +369,103 @@ export default function VoucherDetailScreen() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {verifyOpen &&
+        (() => {
+          const counted = verifyAmountInput.trim()
+            ? Number(verifyAmountInput)
+            : null;
+          const valid = counted != null && Number.isFinite(counted);
+          const diff = valid ? (counted as number) - voucher.total : null;
+          return (
+            <BottomSheet onClose={() => setVerifyOpen(false)}>
+              <div className="flex flex-col">
+                <div className="flex items-start justify-between border-b border-[var(--color-border)] px-5 py-4">
+                  <div>
+                    <div className="eyebrow">VERIFY</div>
+                    <div className="mt-1 font-display text-xl">
+                      Verify voucher
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setVerifyOpen(false)}
+                    aria-label="Close"
+                    className="flex h-8 w-8 items-center justify-center border border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)] active:bg-[var(--color-surface)]"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+
+                <div className="flex flex-col gap-3 px-5 py-4">
+                  <p className="text-xs text-[var(--color-text-muted)]">
+                    Enter the original voucher number and the counted amount.
+                    Counted is stored as data only — never added to any total.
+                  </p>
+                  <div className="flex flex-col gap-1">
+                    <span className="eyebrow">ORIGINAL VOUCHER NUMBER</span>
+                    <Input
+                      type="text"
+                      value={actualCodeInput}
+                      onChange={(e) => setActualCodeInput(e.target.value)}
+                      placeholder="e.g. A1234"
+                      className="h-11 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 text-base text-[var(--color-text)] shadow-none focus-visible:ring-0"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="eyebrow">COUNTED AMOUNT (₹)</span>
+                    <Input
+                      type="number"
+                      inputMode="decimal"
+                      value={verifyAmountInput}
+                      onChange={(e) => setVerifyAmountInput(e.target.value)}
+                      placeholder={String(voucher.total)}
+                      className="h-11 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 text-base font-mono tabular-nums text-[var(--color-text)] shadow-none focus-visible:ring-0"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-3 border-t border-[var(--color-border)] pt-2 font-mono text-xs tabular-nums text-[var(--color-text-muted)]">
+                    <span>vs voucher ₹{formatINR(voucher.total)}</span>
+                    {valid && diff != null && (
+                      <span
+                        className={cn(
+                          "font-bold uppercase tracking-[0.18em]",
+                          diff === 0 && "text-[var(--color-text)]",
+                          diff > 0 && "text-[var(--color-success)]",
+                          diff < 0 && "text-[var(--color-destructive)]",
+                        )}
+                      >
+                        {verifyLabel(diff, formatINR)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div
+                  className="flex gap-2 border-t border-[var(--color-border-strong)] bg-[var(--color-bg)] px-5 py-3"
+                  style={{
+                    paddingBottom: "max(env(safe-area-inset-bottom, 0px), 12px)",
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setVerifyOpen(false)}
+                    className="h-11 flex-1 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-4 text-sm font-semibold text-[var(--color-text)]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={doVerify}
+                    className="flex h-11 flex-1 items-center justify-center gap-2 border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-4 text-sm font-semibold text-[var(--color-accent-ink)]"
+                  >
+                    <Check size={14} />
+                    Verify
+                  </button>
+                </div>
+              </div>
+            </BottomSheet>
+          );
+        })()}
 
       <Dialog open={confirmUnverify} onOpenChange={setConfirmUnverify}>
         <DialogContent

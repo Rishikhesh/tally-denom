@@ -39,11 +39,16 @@ export interface Route {
 export interface Voucher {
   id: string;
   routeId: string;
+  /** Auto-generated dummy number assigned at creation. */
   code: string;
+  /** Real voucher number entered at verification time. Display prefers this. */
+  actualCode: string | null;
   total: number;
   denoms: DenomCounts;
   verified: boolean;
   verifiedAt: number | null;
+  /** Counted amount entered at verification. Data-only; not summed anywhere. */
+  verifyAmount: number | null;
   txDate: string;
   createdAt: number;
   updatedAt: number;
@@ -145,10 +150,13 @@ function mapVoucher(id: string, d: DocumentData): Voucher {
     id,
     routeId: typeof d.routeId === "string" ? d.routeId : "",
     code: typeof d.code === "string" ? d.code : "",
+    actualCode: typeof d.actualCode === "string" ? d.actualCode : null,
     total: typeof d.total === "number" ? d.total : 0,
     denoms: fromWire(d.denoms as DenomCountsWire),
     verified: d.verified === true,
     verifiedAt: tsToMillisOrNull(d.verifiedAt),
+    verifyAmount:
+      typeof d.verifyAmount === "number" ? d.verifyAmount : null,
     txDate: typeof d.txDate === "string" ? d.txDate : "",
     createdAt: tsToMillis(d.createdAt),
     updatedAt: tsToMillis(d.updatedAt),
@@ -872,10 +880,12 @@ export async function createVoucher(
   batch.set(ref, {
     routeId: input.routeId,
     code: input.code,
+    actualCode: null,
     total: input.total,
     denoms: toWire(input.denoms),
     verified: false,
     verifiedAt: null,
+    verifyAmount: null,
     txDate: input.txDate,
     createdAt: now,
     updatedAt: now,
@@ -960,7 +970,11 @@ export async function editVoucher(
   await batch.commit();
 }
 
-export async function verifyVoucher(uid: string, id: string): Promise<void> {
+export async function verifyVoucher(
+  uid: string,
+  id: string,
+  opts?: { actualCode?: string | null; verifyAmount?: number | null },
+): Promise<void> {
   const ref = doc(db, "users", uid, "vouchers", id);
   const snap = await getDoc(ref);
   if (!snap.exists()) {
@@ -972,11 +986,20 @@ export async function verifyVoucher(uid: string, id: string): Promise<void> {
   const txDate = typeof data.txDate === "string" ? data.txDate : null;
   const routeId = typeof data.routeId === "string" ? data.routeId : null;
 
+  const actualCode =
+    opts?.actualCode != null && opts.actualCode.trim()
+      ? opts.actualCode.trim()
+      : null;
+  const verifyAmount =
+    typeof opts?.verifyAmount === "number" ? opts.verifyAmount : null;
+
   const now = serverTimestamp();
   const batch = writeBatch(db);
   batch.update(ref, {
     verified: true,
     verifiedAt: now,
+    actualCode,
+    verifyAmount,
     updatedAt: now,
   });
   const activityRef = newRef(activitiesCol(uid));
@@ -985,9 +1008,10 @@ export async function verifyVoucher(uid: string, id: string): Promise<void> {
       type: "voucher.verify",
       refId: id,
       routeId,
-      title: `VCH #${code} verified`,
+      title: `VCH #${actualCode ?? code} verified`,
       amount: total,
       txDate,
+      meta: { voucherTotal: total, verifyAmount, actualCode },
     }),
     createdAt: now,
   });
@@ -1011,6 +1035,8 @@ export async function unverifyVoucher(uid: string, id: string): Promise<void> {
   batch.update(ref, {
     verified: false,
     verifiedAt: null,
+    actualCode: null,
+    verifyAmount: null,
     updatedAt: now,
   });
   const activityRef = newRef(activitiesCol(uid));

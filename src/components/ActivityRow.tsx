@@ -10,6 +10,8 @@ import {
 import type { ReactNode } from "react";
 import { formatDate, formatTime } from "@/lib/date";
 import type { ActivityType } from "@/lib/activity";
+import { cn } from "@/lib/utils";
+import { verifyStatusOf, verifyTone } from "@/lib/voucher";
 
 interface Activity {
   id: string;
@@ -30,6 +32,11 @@ interface Props {
    * ledger-entry activity). Rendered muted, normal-weight.
    */
   contextLabel?: string;
+  /**
+   * Override the title entirely — used when the activity's stored title froze
+   * a value that has since changed (e.g. a voucher's dummy ref → real number).
+   */
+  titleOverride?: string;
 }
 
 function renderIcon(type: ActivityType): ReactNode {
@@ -49,7 +56,12 @@ function formatINR(n: number): string {
 }
 
 
-export function ActivityRow({ activity, onTap, contextLabel }: Props) {
+export function ActivityRow({
+  activity,
+  onTap,
+  contextLabel,
+  titleOverride,
+}: Props) {
   // Delete activities point at a now-gone target — no chevron, no tap.
   const isDelete = activity.type.endsWith(".delete");
   const tappable = !isDelete && typeof onTap === "function";
@@ -72,7 +84,7 @@ export function ActivityRow({ activity, onTap, contextLabel }: Props) {
   // action verb, and tidy stray separators. Leaves just the human-meaningful
   // entity name (note / title / code) — falls back to the entity type label
   // when stripping empties the string (e.g. plain `Exchange`).
-  let t = activity.title;
+  let t = titleOverride ?? activity.title;
   t = t.replace(/^(Spend|Inflow|Fund|Ledger|Exchange) /, "");
   t = t.replace(/^₹[\d,]+(?:\.\d+)?\s*/, "");
   t = t.replace(/^(in|out)\s+/i, "");
@@ -99,11 +111,31 @@ export function ActivityRow({ activity, onTap, contextLabel }: Props) {
       : null;
 
   // Type chip so each row states what it is (the note alone is ambiguous).
-  const typeTag = activity.type.startsWith("spend.")
-    ? "SPEND"
-    : activity.type.startsWith("exchange.")
-      ? "EXCHANGE"
+  let typeTag: string | null = null;
+  if (activity.type.startsWith("spend.")) typeTag = "SPEND";
+  else if (activity.type.startsWith("exchange.")) typeTag = "EXCHANGE";
+
+  // Action chip — distinguishes same-entity rows (create vs verify vs edit)
+  // that otherwise look identical.
+  let actionTag: string | null = null;
+  if (activity.type === "voucher.create") actionTag = "NEW";
+  else if (activity.type === "voucher.verify") actionTag = "VERIFIED";
+  else if (activity.type === "voucher.edit") actionTag = "EDITED";
+  else if (activity.type === "ledger-entry.edit") actionTag = "EDITED";
+
+  // Verify rows carry the reconciliation result in meta.
+  const verifyStatus =
+    activity.type === "voucher.verify"
+      ? verifyStatusOf(
+          typeof activity.meta?.verifyAmount === "number"
+            ? (activity.meta.verifyAmount as number)
+            : null,
+          typeof activity.meta?.voucherTotal === "number"
+            ? (activity.meta.voucherTotal as number)
+            : 0,
+        )
       : null;
+  const verifyToneVal = verifyTone(verifyStatus);
 
   const body = (
     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -125,6 +157,26 @@ export function ActivityRow({ activity, onTap, contextLabel }: Props) {
         {typeTag && (
           <span className="shrink-0 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--color-text-muted)]">
             {typeTag}
+          </span>
+        )}
+        {actionTag && (
+          <span className="shrink-0 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--color-text-muted)]">
+            {actionTag}
+          </span>
+        )}
+        {verifyStatus && (
+          <span
+            className={cn(
+              "shrink-0 border bg-[var(--color-bg)] px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.18em]",
+              verifyToneVal === "success" &&
+                "border-[var(--color-success)] text-[var(--color-success)]",
+              verifyToneVal === "destructive" &&
+                "border-[var(--color-destructive)] text-[var(--color-destructive)]",
+              verifyToneVal === "neutral" &&
+                "border-[var(--color-border-strong)] text-[var(--color-text-muted)]",
+            )}
+          >
+            {verifyStatus}
           </span>
         )}
         {ledgerKind && (
