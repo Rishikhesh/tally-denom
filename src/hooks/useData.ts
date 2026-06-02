@@ -45,6 +45,14 @@ export interface Voucher {
   actualCode: string | null;
   total: number;
   denoms: DenomCounts;
+  /**
+   * Stage 1 — cash verified. Confirms the physical cash count. Once true the
+   * voucher is locked (no edits / spends) until cash-unverified. Required
+   * before stage 2 (voucher verification).
+   */
+  cashVerified: boolean;
+  cashVerifiedAt: number | null;
+  /** Stage 2 — voucher verified (real number + counted amount reconciled). */
   verified: boolean;
   verifiedAt: number | null;
   /** Counted amount entered at verification. Data-only; not summed anywhere. */
@@ -153,6 +161,8 @@ function mapVoucher(id: string, d: DocumentData): Voucher {
     actualCode: typeof d.actualCode === "string" ? d.actualCode : null,
     total: typeof d.total === "number" ? d.total : 0,
     denoms: fromWire(d.denoms as DenomCountsWire),
+    cashVerified: d.cashVerified === true,
+    cashVerifiedAt: tsToMillisOrNull(d.cashVerifiedAt),
     verified: d.verified === true,
     verifiedAt: tsToMillisOrNull(d.verifiedAt),
     verifyAmount:
@@ -883,6 +893,8 @@ export async function createVoucher(
     actualCode: null,
     total: input.total,
     denoms: toWire(input.denoms),
+    cashVerified: false,
+    cashVerifiedAt: null,
     verified: false,
     verifiedAt: null,
     verifyAmount: null,
@@ -930,6 +942,9 @@ export async function editVoucher(
     throw new Error(`editVoucher: voucher ${id} not found`);
   }
   const data = snap.data();
+  if (data.cashVerified === true) {
+    throw new Error("Cash-verified voucher is locked — cash-unverify to edit.");
+  }
   const before = {
     code: typeof data.code === "string" ? data.code : "",
     total: typeof data.total === "number" ? data.total : 0,
@@ -981,6 +996,9 @@ export async function verifyVoucher(
     throw new Error(`verifyVoucher: voucher ${id} not found`);
   }
   const data = snap.data();
+  if (data.cashVerified !== true) {
+    throw new Error("Cash-verify the voucher before voucher verification.");
+  }
   const code = typeof data.code === "string" ? data.code : "";
   const total = typeof data.total === "number" ? data.total : 0;
   const txDate = typeof data.txDate === "string" ? data.txDate : null;
@@ -1046,6 +1064,81 @@ export async function unverifyVoucher(uid: string, id: string): Promise<void> {
       refId: id,
       routeId,
       title: `VCH #${code} unverified`,
+      amount: total,
+      txDate,
+    }),
+    createdAt: now,
+  });
+  await batch.commit();
+}
+
+// ── Cash verification (stage 1) ────────────────────────────────────────
+
+export async function cashVerifyVoucher(
+  uid: string,
+  id: string,
+): Promise<void> {
+  const ref = doc(db, "users", uid, "vouchers", id);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) {
+    throw new Error(`cashVerifyVoucher: voucher ${id} not found`);
+  }
+  const data = snap.data();
+  const code = typeof data.code === "string" ? data.code : "";
+  const total = typeof data.total === "number" ? data.total : 0;
+  const txDate = typeof data.txDate === "string" ? data.txDate : null;
+  const routeId = typeof data.routeId === "string" ? data.routeId : null;
+
+  const now = serverTimestamp();
+  const batch = writeBatch(db);
+  batch.update(ref, { cashVerified: true, cashVerifiedAt: now, updatedAt: now });
+  const activityRef = newRef(activitiesCol(uid));
+  batch.set(activityRef, {
+    ...buildActivity({
+      type: "voucher.cash-verify",
+      refId: id,
+      routeId,
+      title: `VCH #${data.actualCode ?? code} cash verified`,
+      amount: total,
+      txDate,
+    }),
+    createdAt: now,
+  });
+  await batch.commit();
+}
+
+export async function cashUnverifyVoucher(
+  uid: string,
+  id: string,
+): Promise<void> {
+  const ref = doc(db, "users", uid, "vouchers", id);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) {
+    throw new Error(`cashUnverifyVoucher: voucher ${id} not found`);
+  }
+  const data = snap.data();
+  if (data.verified === true) {
+    throw new Error("Voucher-unverify first before cash-unverifying.");
+  }
+  const code = typeof data.code === "string" ? data.code : "";
+  const total = typeof data.total === "number" ? data.total : 0;
+  const txDate = typeof data.txDate === "string" ? data.txDate : null;
+  const routeId = typeof data.routeId === "string" ? data.routeId : null;
+
+  const now = serverTimestamp();
+  const batch = writeBatch(db);
+  batch.update(ref, {
+    cashVerified: false,
+    cashVerifiedAt: null,
+    updatedAt: now,
+  });
+  const activityRef = newRef(activitiesCol(uid));
+  batch.set(activityRef, {
+    ...buildActivity({
+      type: "voucher.cash-unverify",
+      refId: id,
+      routeId,
+      title: `VCH #${data.actualCode ?? code} cash unverified`,
       amount: total,
       txDate,
     }),

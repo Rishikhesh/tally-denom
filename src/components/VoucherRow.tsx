@@ -1,4 +1,4 @@
-import { Check } from "lucide-react";
+import { Banknote, Check } from "lucide-react";
 import { DenomLine } from "@/components/DenomLine";
 import { formatDate } from "@/lib/date";
 import { DENOMS, type DenomCounts } from "@/lib/denoms";
@@ -11,6 +11,7 @@ interface Voucher {
   actualCode?: string | null;
   total: number;
   denoms: DenomCounts;
+  cashVerified?: boolean;
   verified: boolean;
   verifyAmount?: number | null;
   txDate: string;
@@ -47,6 +48,7 @@ export function VoucherRow({
       ) as DenomCounts)
     : voucher.denoms;
   const verified = voucher.verified;
+  const cashVerified = voucher.cashVerified === true;
   const vStatus = verifyStatusOf(voucher.verifyAmount, voucher.total);
   const vTone = verifyTone(vStatus);
 
@@ -87,7 +89,17 @@ export function VoucherRow({
           >
             <Check size={12} />
             <span className="font-mono text-[10px] uppercase tracking-[0.18em]">
-              Verified
+              Voucher ✓
+            </span>
+          </span>
+        ) : cashVerified ? (
+          <span
+            className="inline-flex shrink-0 items-center gap-1 border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-1.5 py-0.5 text-[var(--color-accent-ink)]"
+            aria-label={`Voucher ${voucher.code} is cash verified`}
+          >
+            <Banknote size={12} />
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em]">
+              Cash ✓
             </span>
           </span>
         ) : (
@@ -95,7 +107,7 @@ export function VoucherRow({
             className="inline-flex shrink-0 items-center border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-text)]"
             aria-label={`Voucher ${voucher.code} is unverified`}
           >
-            UNVERIFIED
+            Voucher unverified
           </span>
         )}
 

@@ -89,6 +89,7 @@ export function ActivityRow({
   t = t.replace(/^₹[\d,]+(?:\.\d+)?\s*/, "");
   t = t.replace(/^(in|out)\s+/i, "");
   t = t.replace(/^[–-]\s*/, "");
+  t = t.replace(/ cash (verified|unverified)$/i, "");
   t = t.replace(/ (created|edited|deleted|verified|unverified)$/i, "");
   t = t.trim();
   let cleanTitle = t;
@@ -119,6 +120,8 @@ export function ActivityRow({
   // that otherwise look identical.
   let actionTag: string | null = null;
   if (activity.type === "voucher.create") actionTag = "NEW";
+  else if (activity.type === "voucher.cash-verify") actionTag = "CASH ✓";
+  else if (activity.type === "voucher.cash-unverify") actionTag = "CASH ✗";
   else if (activity.type === "voucher.verify") actionTag = "VERIFIED";
   else if (activity.type === "voucher.edit") actionTag = "EDITED";
   else if (activity.type === "ledger-entry.edit") actionTag = "EDITED";

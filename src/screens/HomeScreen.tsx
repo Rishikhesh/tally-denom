@@ -1,19 +1,12 @@
-import { ArrowLeftRight, Bell, Moon, Settings, Sun } from "lucide-react";
+import { ArrowLeftRight, Bell, Settings } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
   ActivityRow,
   BalanceHero,
   ExchangeDetailSheet,
   Loader,
+  SettingsDialog,
 } from "@/components";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
 import {
   type Activity,
@@ -28,8 +21,6 @@ import {
   useRoutes,
 } from "@/hooks/useData";
 import { useNavStore } from "@/hooks/useNavStore";
-import { useTheme } from "@/hooks/useTheme";
-import { signOut } from "@/lib/auth";
 import {
   denomInventory,
   netBalance,
@@ -54,7 +45,6 @@ export default function HomeScreen() {
   const recent = useActivity({ limit: 20 });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeExchange, setActiveExchange] = useState<Exchange | null>(null);
-  const { theme, toggleTheme } = useTheme();
 
   const verified = sumVerified(vouchers);
   const unverified = sumUnverified(vouchers);
@@ -147,6 +137,7 @@ export default function HomeScreen() {
         .filter(
           (a) =>
             a.type !== "voucher.unverify" &&
+            a.type !== "voucher.cash-unverify" &&
             a.type !== "route.create" &&
             a.type !== "route.delete" &&
             !a.type.startsWith("fund."),
@@ -314,54 +305,7 @@ export default function HomeScreen() {
         <span>Exchange</span>
       </button>
 
-      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent
-          showCloseButton={false}
-          className="border border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)]"
-        >
-          <DialogHeader>
-            <DialogTitle className="font-display">Settings</DialogTitle>
-            <DialogDescription className="text-[var(--color-text-muted)]">
-              Signed in. Tap below to sign out.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center justify-between border-t border-b border-[var(--color-border)] py-3">
-            <div>
-              <div className="eyebrow">THEME</div>
-              <div className="text-sm">
-                {theme === "dark" ? "Dark" : "Light"}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={toggleTheme}
-              aria-label="Toggle theme"
-              className="flex h-10 w-10 items-center justify-center border border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)] active:bg-[var(--color-surface)]"
-            >
-              {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
-          </div>
-          <DialogFooter>
-            <button
-              type="button"
-              onClick={() => setSettingsOpen(false)}
-              className="h-10 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-4 text-sm font-semibold text-[var(--color-text)]"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setSettingsOpen(false);
-                void signOut();
-              }}
-              className="h-10 border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-4 text-sm font-semibold text-[var(--color-accent-ink)]"
-            >
-              Sign out
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
 
       {activeExchange && (
         <ExchangeDetailSheet

@@ -1,7 +1,7 @@
 import {
+  Banknote,
   Check,
   ChevronLeft,
-  Lock,
   Pencil,
   Plus,
   RotateCcw,
@@ -20,8 +20,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { DENOMS, type DenomCounts, emptyDenoms } from "@/lib/denoms";
+import { useAdminStore } from "@/hooks/useAdminStore";
 import { useAuth } from "@/hooks/useAuth";
 import {
+  cashUnverifyVoucher,
+  cashVerifyVoucher,
   deleteSpend,
   deleteVoucher,
   unverifyVoucher,
@@ -49,6 +52,7 @@ function formatINR(n: number): string {
 
 export default function VoucherDetailScreen() {
   const { user, loading } = useAuth();
+  const isAdmin = useAdminStore((s) => s.isAdmin);
   const top = useNavStore((s) => s.stack[s.stack.length - 1]);
   const routeId =
     top && top.params
@@ -58,6 +62,9 @@ export default function VoucherDetailScreen() {
     top && top.params
       ? (top.params.voucherId as string | undefined) ?? null
       : null;
+  // Opened from the user-facing Entry flow vs. an admin tab (Records/Home).
+  const fromEntry =
+    top && top.params ? top.params.source === "entry" : false;
 
   const vouchers = useAllVouchers();
   const voucher = useMemo(
@@ -67,6 +74,8 @@ export default function VoucherDetailScreen() {
   const spends = useSpendsByVoucher(voucherId);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmUnverify, setConfirmUnverify] = useState(false);
+  const [confirmCashVerify, setConfirmCashVerify] = useState(false);
+  const [confirmCashUnverify, setConfirmCashUnverify] = useState(false);
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [actualCodeInput, setActualCodeInput] = useState("");
   const [verifyAmountInput, setVerifyAmountInput] = useState("");
@@ -126,6 +135,14 @@ export default function VoucherDetailScreen() {
     if (!user || !voucherId) return;
     void unverifyVoucher(user.uid, voucherId);
   }
+  function doCashVerify() {
+    if (!user || !voucherId) return;
+    void cashVerifyVoucher(user.uid, voucherId);
+  }
+  function doCashUnverify() {
+    if (!user || !voucherId) return;
+    void cashUnverifyVoucher(user.uid, voucherId);
+  }
   function doDelete() {
     if (!user || !voucherId) return;
     void deleteVoucher(user.uid, voucherId);
@@ -141,6 +158,12 @@ export default function VoucherDetailScreen() {
   }
 
   const verified = voucher.verified;
+  const cashVerified = voucher.cashVerified;
+  // Editable only before cash verification (stage 1 locks the voucher).
+  const locked = cashVerified;
+  // Voucher verify/unverify are admin-only and never offered from the Entry
+  // flow — that's the user surface (cash verify/unverify only).
+  const adminActions = isAdmin && !fromEntry;
   const displayCode = voucherDisplayCode(voucher);
   // Verify reconciliation: counted amount vs collected total.
   const verifyDiff = verifyDiffOf(voucher.verifyAmount, voucher.total);
@@ -165,13 +188,13 @@ export default function VoucherDetailScreen() {
             </span>
           )}
         </div>
-        {verified && (
+        {locked && (
           <span
             className="flex h-7 w-7 shrink-0 items-center justify-center border border-[var(--color-border-strong)] bg-[var(--color-accent)] text-[var(--color-accent-ink)]"
-            aria-label="Verified (locked)"
-            title="Verified records are read-only"
+            aria-label="Locked"
+            title="Cash-verified — locked until cash-unverified"
           >
-            <Lock size={12} />
+            <Banknote size={12} />
           </span>
         )}
       </header>
@@ -197,15 +220,26 @@ export default function VoucherDetailScreen() {
           )}
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          {verified ? (
-            <span className="inline-flex shrink-0 items-center border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-accent-ink)]">
-              VERIFIED
-            </span>
-          ) : (
-            <span className="inline-flex shrink-0 items-center border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-text)]">
-              UNVERIFIED
-            </span>
-          )}
+          <span
+            className={cn(
+              "inline-flex shrink-0 items-center border border-[var(--color-border-strong)] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em]",
+              cashVerified
+                ? "bg-[var(--color-accent)] text-[var(--color-accent-ink)]"
+                : "bg-[var(--color-bg)] text-[var(--color-text)]",
+            )}
+          >
+            {cashVerified ? "Cash ✓" : "Cash pending"}
+          </span>
+          <span
+            className={cn(
+              "inline-flex shrink-0 items-center border border-[var(--color-border-strong)] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em]",
+              verified
+                ? "bg-[var(--color-accent)] text-[var(--color-accent-ink)]"
+                : "bg-[var(--color-bg)] text-[var(--color-text)]",
+            )}
+          >
+            {verified ? "Voucher verified" : "Voucher unverified"}
+          </span>
           <span className="font-mono text-xs tabular-nums text-[var(--color-text-muted)]">
             {formatDate(voucher.txDate)}
           </span>
@@ -245,30 +279,62 @@ export default function VoucherDetailScreen() {
           </div>
         )}
 
-        {/* Actions */}
+        {/* Actions — gated by the two-stage flow + admin/user surface.
+            Voucher verify/unverify are admin-only and hidden in the Entry
+            (user) flow; cash verify/unverify + edit/delete are user-level. */}
         <div className="mt-4 flex flex-wrap gap-2">
           {verified ? (
-            <button
-              type="button"
-              onClick={() => setConfirmUnverify(true)}
-              className="flex h-9 items-center gap-1.5 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 text-xs font-bold uppercase tracking-[0.14em] text-[var(--color-text)] active:bg-[var(--color-surface)]"
-            >
-              <RotateCcw size={14} />
-              Unverify
-            </button>
+            // Voucher-verified → only an admin can revert it.
+            adminActions ? (
+              <button
+                type="button"
+                onClick={() => setConfirmUnverify(true)}
+                className="flex h-9 items-center gap-1.5 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 text-xs font-bold uppercase tracking-[0.14em] text-[var(--color-text)] active:bg-[var(--color-surface)]"
+              >
+                <RotateCcw size={14} />
+                Voucher unverify
+              </button>
+            ) : (
+              <span className="font-mono text-xs text-[var(--color-text-muted)]">
+                Voucher verified — locked. Admin only.
+              </span>
+            )
+          ) : cashVerified ? (
+            // Cash-verified but not voucher-verified.
+            <>
+              {adminActions && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActualCodeInput("");
+                    setVerifyAmountInput("");
+                    setVerifyOpen(true);
+                  }}
+                  className="flex h-9 items-center gap-1.5 border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-3 text-xs font-bold uppercase tracking-[0.14em] text-[var(--color-accent-ink)] active:opacity-80"
+                >
+                  <Check size={14} />
+                  Voucher verify
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setConfirmCashUnverify(true)}
+                className="flex h-9 items-center gap-1.5 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 text-xs font-bold uppercase tracking-[0.14em] text-[var(--color-text)] active:bg-[var(--color-surface)]"
+              >
+                <RotateCcw size={14} />
+                Cash unverify
+              </button>
+            </>
           ) : (
+            // Editable stage — cash verify, edit, delete.
             <>
               <button
                 type="button"
-                onClick={() => {
-                  setActualCodeInput("");
-                  setVerifyAmountInput("");
-                  setVerifyOpen(true);
-                }}
+                onClick={() => setConfirmCashVerify(true)}
                 className="flex h-9 items-center gap-1.5 border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-3 text-xs font-bold uppercase tracking-[0.14em] text-[var(--color-accent-ink)] active:opacity-80"
               >
-                <Check size={14} />
-                Verify
+                <Banknote size={14} />
+                Cash verify
               </button>
               <button
                 type="button"
@@ -278,16 +344,16 @@ export default function VoucherDetailScreen() {
                 <Pencil size={14} />
                 Edit
               </button>
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="flex h-9 items-center gap-1.5 border border-[var(--color-destructive)] bg-[var(--color-bg)] px-3 text-xs font-bold uppercase tracking-[0.14em] text-[var(--color-destructive)] active:bg-[var(--color-surface)]"
+              >
+                <Trash2 size={14} />
+                Delete
+              </button>
             </>
           )}
-          <button
-            type="button"
-            onClick={() => setConfirmDelete(true)}
-            className="flex h-9 items-center gap-1.5 border border-[var(--color-destructive)] bg-[var(--color-bg)] px-3 text-xs font-bold uppercase tracking-[0.14em] text-[var(--color-destructive)] active:bg-[var(--color-surface)]"
-          >
-            <Trash2 size={14} />
-            Delete
-          </button>
         </div>
       </div>
 
@@ -298,7 +364,7 @@ export default function VoucherDetailScreen() {
           <div className="flex flex-col items-center gap-1 py-6">
             <div className="eyebrow">00 / EMPTY</div>
             <p className="text-sm text-[var(--color-text-muted)]">
-              {verified
+              {locked
                 ? "No spends on this voucher."
                 : "No spends for this voucher yet. Tap + to add one."}
             </p>
@@ -306,8 +372,8 @@ export default function VoucherDetailScreen() {
         ) : (
           <div className="flex flex-col gap-2 pb-20">
             {spends.map((s) =>
-              verified ? (
-                // Verified voucher = view only. Spends shown read-only.
+              locked ? (
+                // Cash-verified voucher = locked. Spends shown read-only.
                 <SpendRow key={s.id} spend={s} />
               ) : (
                 <SpendRow
@@ -322,8 +388,8 @@ export default function VoucherDetailScreen() {
         )}
       </div>
 
-      {/* Spend FAB only on unverified vouchers — verified is view-only. */}
-      {!verified && (
+      {/* Spend FAB only before cash verification — cash-verified is locked. */}
+      {!locked && (
         <button
           type="button"
           onClick={() => openSpendEditor()}
@@ -382,7 +448,7 @@ export default function VoucherDetailScreen() {
               <div className="flex flex-col">
                 <div className="flex items-start justify-between border-b border-[var(--color-border)] px-5 py-4">
                   <div>
-                    <div className="eyebrow">VERIFY</div>
+                    <div className="eyebrow">VOUCHER VERIFY</div>
                     <div className="mt-1 font-display text-xl">
                       Verify voucher
                     </div>
@@ -459,7 +525,7 @@ export default function VoucherDetailScreen() {
                     className="flex h-11 flex-1 items-center justify-center gap-2 border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-4 text-sm font-semibold text-[var(--color-accent-ink)]"
                   >
                     <Check size={14} />
-                    Verify
+                    Voucher verify
                   </button>
                 </div>
               </div>
@@ -474,11 +540,12 @@ export default function VoucherDetailScreen() {
         >
           <DialogHeader>
             <DialogTitle className="font-display">
-              Mark as unverified?
+              Mark voucher unverified?
             </DialogTitle>
             <DialogDescription className="text-[var(--color-text-muted)]">
-              VCH #{voucher.code} · ₹{formatINR(voucher.total)}. It returns to
-              the unverified list and can be edited again.
+              VCH #{displayCode} · ₹{formatINR(voucher.total)}. The original
+              number and counted amount are cleared. It stays cash-verified —
+              cash-unverify to edit.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -498,7 +565,78 @@ export default function VoucherDetailScreen() {
               className="flex h-10 items-center gap-2 border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-4 text-sm font-semibold text-[var(--color-accent-ink)]"
             >
               <RotateCcw size={14} />
-              Mark unverified
+              Voucher unverify
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmCashVerify} onOpenChange={setConfirmCashVerify}>
+        <DialogContent
+          showCloseButton={false}
+          className="border border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)]"
+        >
+          <DialogHeader>
+            <DialogTitle className="font-display">Cash verify?</DialogTitle>
+            <DialogDescription className="text-[var(--color-text-muted)]">
+              VCH #{displayCode} · ₹{formatINR(voucher.total)}. The voucher
+              locks — no edits or spends until cash-unverified. Voucher
+              verification becomes available.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setConfirmCashVerify(false)}
+              className="h-10 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-4 text-sm font-semibold text-[var(--color-text)]"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmCashVerify(false);
+                doCashVerify();
+              }}
+              className="flex h-10 items-center gap-2 border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-4 text-sm font-semibold text-[var(--color-accent-ink)]"
+            >
+              <Banknote size={14} />
+              Cash verify
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmCashUnverify} onOpenChange={setConfirmCashUnverify}>
+        <DialogContent
+          showCloseButton={false}
+          className="border border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)]"
+        >
+          <DialogHeader>
+            <DialogTitle className="font-display">Cash unverify?</DialogTitle>
+            <DialogDescription className="text-[var(--color-text-muted)]">
+              VCH #{displayCode} · ₹{formatINR(voucher.total)}. It unlocks for
+              edits and spends again.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setConfirmCashUnverify(false)}
+              className="h-10 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-4 text-sm font-semibold text-[var(--color-text)]"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmCashUnverify(false);
+                doCashUnverify();
+              }}
+              className="flex h-10 items-center gap-2 border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-4 text-sm font-semibold text-[var(--color-accent-ink)]"
+            >
+              <RotateCcw size={14} />
+              Cash unverify
             </button>
           </DialogFooter>
         </DialogContent>

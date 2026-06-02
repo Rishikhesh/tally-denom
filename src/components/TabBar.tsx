@@ -8,18 +8,22 @@ export type { TabId };
 interface Props {
   active: TabId;
   onChange: (next: TabId) => void;
+  /** When false, only the user-facing Entry tab is shown. */
+  isAdmin?: boolean;
 }
 
 type IconCmp = ComponentType<SVGProps<SVGSVGElement> & { size?: number }>;
 
-const TABS: Array<{ id: TabId; label: string; Icon: IconCmp }> = [
-  { id: "home", label: "Home", Icon: Home },
-  { id: "entry", label: "Entry", Icon: Plus },
-  { id: "ledger", label: "Ledger", Icon: Scale },
-  { id: "records", label: "Records", Icon: BookOpen },
-];
+const TABS: Array<{ id: TabId; label: string; Icon: IconCmp; admin: boolean }> =
+  [
+    { id: "home", label: "Home", Icon: Home, admin: true },
+    { id: "entry", label: "Entry", Icon: Plus, admin: false },
+    { id: "ledger", label: "Ledger", Icon: Scale, admin: true },
+    { id: "records", label: "Records", Icon: BookOpen, admin: true },
+  ];
 
-export function TabBar({ active, onChange }: Props) {
+export function TabBar({ active, onChange, isAdmin = false }: Props) {
+  const tabs = isAdmin ? TABS : TABS.filter((t) => !t.admin);
   return (
     <nav
       aria-label="Primary navigation"
@@ -29,7 +33,7 @@ export function TabBar({ active, onChange }: Props) {
         height: "var(--tab-bar-height)",
       }}
     >
-      {TABS.map(({ id, label, Icon }) => {
+      {tabs.map(({ id, label, Icon }) => {
         const isActive = id === active;
         return (
           <button

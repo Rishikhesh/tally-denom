@@ -180,8 +180,8 @@ export default function SpendEditorScreen() {
     );
   }
 
-  // Verified vouchers are view-only — no spends can be added or edited.
-  if (voucher?.verified) {
+  // Cash-verified vouchers are locked — no spends can be added or edited.
+  if (voucher?.cashVerified) {
     return (
       <div className="flex h-full flex-col">
         <header className="flex items-center gap-3 border-b border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 py-3">
@@ -201,8 +201,8 @@ export default function SpendEditorScreen() {
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
           <div className="eyebrow">LOCKED</div>
           <p className="text-sm text-[var(--color-text-muted)]">
-            This voucher is verified and view-only. Spends can't be added or
-            edited. Mark it unverified first if you need to change it.
+            This voucher is cash-verified and view-only. Spends can't be added
+            or edited. Cash-unverify it first if you need to change it.
           </p>
           <button
             type="button"

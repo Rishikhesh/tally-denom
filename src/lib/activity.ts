@@ -3,6 +3,8 @@ export type ActivityType =
   | "route.delete"
   | "voucher.create"
   | "voucher.edit"
+  | "voucher.cash-verify"
+  | "voucher.cash-unverify"
   | "voucher.verify"
   | "voucher.unverify"
   | "voucher.delete"

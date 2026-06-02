@@ -180,7 +180,10 @@ export default function ActivityScreen() {
   const activity = useMemo(
     () =>
       rawActivity.filter(
-        (a) => a.type !== "voucher.unverify" && !a.type.startsWith("fund."),
+        (a) =>
+          a.type !== "voucher.unverify" &&
+          a.type !== "voucher.cash-unverify" &&
+          !a.type.startsWith("fund."),
       ),
     [rawActivity],
   );

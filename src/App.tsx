@@ -6,6 +6,7 @@ import {
   TabBar,
   type TabId,
 } from "@/components";
+import { useAdminStore } from "@/hooks/useAdminStore";
 import { useAuth } from "@/hooks/useAuth";
 import { type NavEntry, useNavStore } from "@/hooks/useNavStore";
 import { useTheme } from "@/hooks/useTheme";
@@ -49,9 +50,18 @@ export default function App() {
   useTheme();
 
   const { user, loading } = useAuth();
+  const isAdmin = useAdminStore((s) => s.isAdmin);
   const tab = useNavStore((s) => s.tab);
   const stack = useNavStore((s) => s.stack);
   const top: NavEntry | undefined = stack[stack.length - 1];
+
+  // Non-admins live on the Entry tab — snap back if an admin tab is somehow
+  // active (e.g. admin mode was just disabled).
+  useEffect(() => {
+    if (!isAdmin && tab !== "entry") {
+      useNavStore.getState().setTab("entry");
+    }
+  }, [isAdmin, tab]);
 
   const [pwaUpdate, setPwaUpdate] = useState<PwaUpdateState>({
     needRefresh: false,
@@ -110,6 +120,8 @@ export default function App() {
           break;
       }
     }
+    // Non-admins only ever see the Entry tab at the base of the stack.
+    if (!isAdmin) return <EntryScreen />;
     switch (tab) {
       case "home":
         return <HomeScreen />;
@@ -146,7 +158,7 @@ export default function App() {
           <Suspense fallback={<Loader />}>{renderScreen()}</Suspense>
         </div>
         {showTabBar(top) && (
-          <TabBar active={tab} onChange={handleTabChange} />
+          <TabBar active={tab} onChange={handleTabChange} isAdmin={isAdmin} />
         )}
       </div>
     </div>

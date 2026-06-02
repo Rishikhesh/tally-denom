@@ -134,9 +134,9 @@ export default function VoucherEditorScreen() {
     );
   }
 
-  // Verified vouchers are immutable — never editable. If we somehow land here
-  // with a verified voucher, redirect to the read-only detail view.
-  if (existing?.verified) {
+  // Cash-verified vouchers are locked — never editable. If we somehow land
+  // here with one, show the read-only locked notice.
+  if (existing?.cashVerified) {
     return (
       <div className="flex h-full flex-col">
         <header className="flex items-center gap-3 border-b border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 py-3">
@@ -156,8 +156,8 @@ export default function VoucherEditorScreen() {
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
           <div className="eyebrow">LOCKED</div>
           <p className="text-sm text-[var(--color-text-muted)]">
-            This voucher is verified and view-only. Open it from Records to
-            view, or mark it unverified to edit.
+            This voucher is cash-verified and view-only. Open it from Records
+            to view, or cash-unverify it to edit.
           </p>
           <button
             type="button"

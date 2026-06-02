@@ -22,3 +22,4 @@ export { DateRangeSheet } from "./DateRangeSheet";
 export { ExchangeDetailSheet } from "./ExchangeDetailSheet";
 export { ActivityRow } from "./ActivityRow";
 export { TabBar, type TabId } from "./TabBar";
+export { SettingsDialog } from "./SettingsDialog";

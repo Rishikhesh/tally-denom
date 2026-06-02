@@ -5,11 +5,12 @@ import {
   ChevronRight,
   Plus,
   Search,
+  Settings,
   Wallet,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BottomSheet, Loader } from "@/components";
+import { BottomSheet, Loader, SettingsDialog } from "@/components";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -40,6 +41,7 @@ export default function EntryScreen() {
   const spentMap = useMemo(() => spentByVoucher(allSpends), [allSpends]);
 
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState("");
@@ -129,7 +131,7 @@ export default function EntryScreen() {
   function openVoucher(v: (typeof vouchers)[number]) {
     useNavStore.getState().go({
       name: "voucher-detail",
-      params: { routeId: v.routeId, voucherId: v.id },
+      params: { routeId: v.routeId, voucherId: v.id, source: "entry" },
     });
   }
 
@@ -167,8 +169,16 @@ export default function EntryScreen() {
 
   return (
     <div className="relative flex h-full flex-col">
-      <header className="border-b border-[var(--color-border-strong)] bg-[var(--color-bg)] px-5 py-4">
+      <header className="flex items-center justify-between border-b border-[var(--color-border-strong)] bg-[var(--color-bg)] px-5 py-4">
         <h1 className="font-display text-xl">Entry</h1>
+        <button
+          type="button"
+          onClick={() => setSettingsOpen(true)}
+          aria-label="Settings"
+          className="flex h-9 w-9 items-center justify-center border border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)] active:bg-[var(--color-surface)]"
+        >
+          <Settings size={16} />
+        </button>
       </header>
 
       {/* Route dropdown — opens a bottom sheet with search + create + list. */}
@@ -438,6 +448,8 @@ export default function EntryScreen() {
           </div>
         </BottomSheet>
       )}
+
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </div>
   );
 }

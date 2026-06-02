@@ -289,7 +289,7 @@ export default function RouteScreen() {
                 onRowTap={() =>
                   useNavStore.getState().go({
                     name: "voucher-detail",
-                    params: { routeId, voucherId: v.id },
+                    params: { routeId, voucherId: v.id, source: "entry" },
                   })
                 }
               />
