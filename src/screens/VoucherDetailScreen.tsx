@@ -245,6 +245,13 @@ export default function VoucherDetailScreen() {
           </span>
         </div>
 
+        <div className="mt-2 flex items-center gap-2">
+          <span className="eyebrow">OWNER</span>
+          <span className="font-mono text-xs text-[var(--color-text)]">
+            {voucher.createdByName ?? "Unknown"}
+          </span>
+        </div>
+
         <div className="mt-3 flex flex-col gap-2">
           <DenomTally
             counts={netDenoms}

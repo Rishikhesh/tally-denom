@@ -1,4 +1,12 @@
-import { LogOut, Moon, ShieldCheck, ShieldOff, Sun } from "lucide-react";
+import {
+  Check,
+  LogOut,
+  Moon,
+  Pencil,
+  ShieldCheck,
+  ShieldOff,
+  Sun,
+} from "lucide-react";
 import { useState } from "react";
 import {
   Dialog,
@@ -11,8 +19,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { useAdminStore } from "@/hooks/useAdminStore";
 import { useNavStore } from "@/hooks/useNavStore";
+import { useOperatorStore } from "@/hooks/useOperatorStore";
 import { useTheme } from "@/hooks/useTheme";
 import { signOut } from "@/lib/auth";
+
+const NAME_MAX = 40;
 
 interface Props {
   open: boolean;
@@ -24,18 +35,50 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
   const isAdmin = useAdminStore((s) => s.isAdmin);
   const enableAdmin = useAdminStore((s) => s.enable);
   const disableAdmin = useAdminStore((s) => s.disable);
+  const operatorName = useOperatorStore((s) => s.name);
+  const setOperatorName = useOperatorStore((s) => s.setName);
 
   const [pwOpen, setPwOpen] = useState(false);
   const [pw, setPw] = useState("");
   const [pwError, setPwError] = useState<string | null>(null);
+
+  const [nameEditing, setNameEditing] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [nameError, setNameError] = useState<string | null>(null);
 
   function resetPw() {
     setPwOpen(false);
     setPw("");
     setPwError(null);
   }
+  function resetName() {
+    setNameEditing(false);
+    setNameDraft("");
+    setNameError(null);
+  }
+  function startNameEdit() {
+    setNameDraft(operatorName ?? "");
+    setNameError(null);
+    setNameEditing(true);
+  }
+  function saveName() {
+    const next = nameDraft.trim();
+    if (!next) {
+      setNameError("Name is required");
+      return;
+    }
+    if (next.length > NAME_MAX) {
+      setNameError(`Name must be ${NAME_MAX} characters or fewer`);
+      return;
+    }
+    setOperatorName(next);
+    resetName();
+  }
   function handleOpenChange(next: boolean) {
-    if (!next) resetPw();
+    if (!next) {
+      resetPw();
+      resetName();
+    }
     onOpenChange(next);
   }
   function submitPw() {
@@ -64,6 +107,65 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
             Signed in. Manage appearance and access below.
           </DialogDescription>
         </DialogHeader>
+
+        {/* Operator name (device-local) */}
+        <div className="flex flex-col gap-2 border-t border-[var(--color-border)] py-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="eyebrow">YOUR NAME</div>
+              <div className="text-sm">{operatorName ?? "Not set"}</div>
+            </div>
+            {!nameEditing && (
+              <button
+                type="button"
+                onClick={startNameEdit}
+                className="flex h-10 items-center gap-1.5 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 text-xs font-bold uppercase tracking-[0.14em] text-[var(--color-text)] active:bg-[var(--color-surface)]"
+              >
+                <Pencil size={14} />
+                Edit
+              </button>
+            )}
+          </div>
+          {nameEditing && (
+            <div className="flex flex-col gap-2">
+              <Input
+                type="text"
+                value={nameDraft}
+                onChange={(e) => {
+                  setNameDraft(e.target.value);
+                  setNameError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") saveName();
+                }}
+                placeholder="Your name"
+                className="h-11 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 text-base text-[var(--color-text)] shadow-none focus-visible:ring-0"
+              />
+              {nameError && (
+                <span className="font-mono text-xs text-[var(--color-destructive)]">
+                  {nameError}
+                </span>
+              )}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={resetName}
+                  className="h-10 flex-1 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-4 text-sm font-semibold text-[var(--color-text)]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={saveName}
+                  className="flex h-10 flex-1 items-center justify-center gap-2 border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-4 text-sm font-semibold text-[var(--color-accent-ink)]"
+                >
+                  <Check size={14} />
+                  Save
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Theme */}
         <div className="flex items-center justify-between border-t border-[var(--color-border)] py-3">

@@ -8,6 +8,7 @@ import {
 } from "@/components";
 import { useAdminStore } from "@/hooks/useAdminStore";
 import { useAuth } from "@/hooks/useAuth";
+import { useOperatorStore } from "@/hooks/useOperatorStore";
 import { type NavEntry, useNavStore } from "@/hooks/useNavStore";
 import { useTheme } from "@/hooks/useTheme";
 import { type PwaUpdateState, subscribeToPwaUpdates } from "@/pwa";
@@ -32,6 +33,7 @@ const ExchangeEditorScreen = lazy(
   () => import("@/screens/ExchangeEditorScreen"),
 );
 const SignInScreen = lazy(() => import("@/screens/SignInScreen"));
+const NameGateScreen = lazy(() => import("@/screens/NameGateScreen"));
 
 const FULLSCREEN_STACK_NAMES = new Set([
   "voucher-editor",
@@ -51,6 +53,7 @@ export default function App() {
 
   const { user, loading } = useAuth();
   const isAdmin = useAdminStore((s) => s.isAdmin);
+  const operatorName = useOperatorStore((s) => s.name);
   const tab = useNavStore((s) => s.tab);
   const stack = useNavStore((s) => s.stack);
   const top: NavEntry | undefined = stack[stack.length - 1];
@@ -88,6 +91,23 @@ export default function App() {
           <div className="relative flex-1 overflow-hidden">
             <Suspense fallback={<Loader />}>
               <SignInScreen />
+            </Suspense>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Signed in but this device has no operator name yet — block until set, so
+  // every record is attributable to whoever is using this device.
+  if (!operatorName) {
+    return (
+      <div className="app-shell-wrap">
+        <div className="phone-canvas">
+          {pwaUpdate.needRefresh && <PwaUpdatePrompt />}
+          <div className="relative flex-1 overflow-hidden">
+            <Suspense fallback={<Loader />}>
+              <NameGateScreen />
             </Suspense>
           </div>
         </div>

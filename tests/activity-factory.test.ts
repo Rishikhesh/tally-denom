@@ -20,6 +20,8 @@ describe("buildActivity()", () => {
       amount: 1000,
       txDate: "2026-05-28",
       meta: { code: "A123" },
+      // No browser localStorage in the test env → falls back to placeholder.
+      actorName: "Unknown",
     });
   });
 

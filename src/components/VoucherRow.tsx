@@ -15,6 +15,7 @@ interface Voucher {
   verified: boolean;
   verifyAmount?: number | null;
   txDate: string;
+  createdByName?: string | null;
 }
 
 interface Props {
@@ -25,6 +26,8 @@ interface Props {
   spentAmount?: number;
   /** Denoms spent against this voucher — denom line shows the net remainder. */
   spentDenoms?: DenomCounts;
+  /** Records-only: show a "Voucher pending" badge on cash-verified rows. */
+  showVoucherPending?: boolean;
 }
 
 function formatINR(n: number): string {
@@ -39,6 +42,7 @@ export function VoucherRow({
   onRowTap,
   spentAmount = 0,
   spentDenoms,
+  showVoucherPending = false,
 }: Props) {
   // Net balance = collected total − spent against this voucher.
   const netAmount = voucher.total - spentAmount;
@@ -73,6 +77,7 @@ export function VoucherRow({
           </span>
           <span className="font-mono text-xs tabular-nums text-[var(--color-text-muted)]">
             {formatDate(voucher.txDate)}
+            {voucher.createdByName ? ` · by ${voucher.createdByName}` : ""}
           </span>
         </div>
         <span className="shrink-0 self-center font-mono text-sm tabular-nums text-[var(--color-text)]">
@@ -93,21 +98,31 @@ export function VoucherRow({
             </span>
           </span>
         ) : cashVerified ? (
-          <span
-            className="inline-flex shrink-0 items-center gap-1 border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-1.5 py-0.5 text-[var(--color-accent-ink)]"
-            aria-label={`Voucher ${voucher.code} is cash verified`}
-          >
-            <Banknote size={12} />
-            <span className="font-mono text-[10px] uppercase tracking-[0.18em]">
-              Cash ✓
+          <>
+            <span
+              className="inline-flex shrink-0 items-center gap-1 border border-[var(--color-border-strong)] bg-[var(--color-accent)] px-1.5 py-0.5 text-[var(--color-accent-ink)]"
+              aria-label={`Voucher ${voucher.code} is cash verified`}
+            >
+              <Banknote size={12} />
+              <span className="font-mono text-[10px] uppercase tracking-[0.18em]">
+                Cash ✓
+              </span>
             </span>
-          </span>
+            {showVoucherPending && (
+              <span
+                className="inline-flex shrink-0 items-center border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-text)]"
+                aria-label={`Voucher ${voucher.code} voucher pending`}
+              >
+                Voucher pending
+              </span>
+            )}
+          </>
         ) : (
           <span
             className="inline-flex shrink-0 items-center border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-text)]"
-            aria-label={`Voucher ${voucher.code} is unverified`}
+            aria-label={`Voucher ${voucher.code} cash pending`}
           >
-            Voucher unverified
+            Cash pending
           </span>
         )}
 

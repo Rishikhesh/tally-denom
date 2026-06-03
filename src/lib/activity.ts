@@ -1,3 +1,5 @@
+import { getOperatorName } from "@/lib/operator";
+
 export type ActivityType =
   | "route.create"
   | "route.delete"
@@ -41,6 +43,8 @@ export interface ActivityDoc {
   amount: number | null;
   txDate: string | null;
   meta: Record<string, unknown>;
+  /** Device-local operator who performed the action (frozen at write time). */
+  actorName: string;
 }
 
 /**
@@ -58,5 +62,6 @@ export function buildActivity(input: BuildActivityInput): ActivityDoc {
     amount: input.amount ?? null,
     txDate: input.txDate ?? null,
     meta: input.meta ?? {},
+    actorName: getOperatorName(),
   };
 }

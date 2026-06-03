@@ -21,6 +21,8 @@ interface Activity {
   txDate: string | null;
   createdAt: number;
   meta?: Record<string, unknown>;
+  /** Device-local operator who performed the action. */
+  actorName?: string;
 }
 
 interface Props {
@@ -70,6 +72,7 @@ export function ActivityRow({
   const metaParts: string[] = [formatTime(activity.createdAt)];
   if (activity.txDate) metaParts.push(formatDate(activity.txDate));
   if (activity.amount != null) metaParts.push(`₹${formatINR(activity.amount)}`);
+  if (activity.actorName) metaParts.push(`by ${activity.actorName}`);
   // Caller-supplied context (route name / voucher code / ledger name).
   const titleContextSuffix = contextLabel ? ` · ${contextLabel}` : "";
 

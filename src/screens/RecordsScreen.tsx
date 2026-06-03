@@ -24,12 +24,15 @@ import { formatDate } from "@/lib/date";
 import { verifyStatusOf } from "@/lib/voucher";
 
 type SegId = "verified" | "unverified" | "spends" | "exchanges";
+// Verification type within the Verified / Unverified segments.
+type VType = "cash" | "voucher";
 
 // Module-level so the chosen segment survives RecordsScreen unmount/remount
 // (e.g. drilling into a record and pressing back). Resets only on reload.
 let lastSeg: SegId = "unverified";
 // Reset stale persisted segment if the inflow tab was last selected.
 if ((lastSeg as string) === "funds") lastSeg = "unverified";
+let lastVType: VType = "voucher";
 
 function formatINR(n: number): string {
   return n.toLocaleString("en-IN", {
@@ -51,6 +54,11 @@ export default function RecordsScreen() {
   const setSeg = (next: SegId) => {
     lastSeg = next;
     setSegState(next);
+  };
+  const [vType, setVTypeState] = useState<VType>(lastVType);
+  const setVType = (next: VType) => {
+    lastVType = next;
+    setVTypeState(next);
   };
   const [query, setQuery] = useState("");
   // Verified sub-filter by reconciliation status.
@@ -80,23 +88,13 @@ export default function RecordsScreen() {
   }
   const [activeExchange, setActiveExchange] = useState<Exchange | null>(null);
 
-  const { verified, unverified } = useMemo(() => {
-    const v = [] as typeof vouchers;
-    const u = [] as typeof vouchers;
-    for (const row of vouchers) {
-      if (row.verified) v.push(row);
-      else u.push(row);
-    }
-    return { verified: v, unverified: u };
-  }, [vouchers]);
-
-  // One Fuse instance per dataset — rebuilt only when the underlying list
-  // changes. `total` is searched as a string to allow "5000" matches against
-  // ₹5,000.00 rows. Threshold 0.4 = forgiving but not noise.
-  const fuseVerified = useMemo(
+  // One Fuse over all vouchers — the Verified/Unverified × Cash/Voucher
+  // selection is applied as a predicate after searching. `total` is searched
+  // as a string so "5000" matches ₹5,000.00 rows. Threshold 0.4 = forgiving.
+  const fuseVouchers = useMemo(
     () =>
       new Fuse(
-        verified.map((v) => ({
+        vouchers.map((v) => ({
           item: v,
           code: v.code,
           date: formatDate(v.txDate),
@@ -104,20 +102,7 @@ export default function RecordsScreen() {
         })),
         { keys: ["code", "date", "total"], threshold: 0.4, ignoreLocation: true },
       ),
-    [verified],
-  );
-  const fuseUnverified = useMemo(
-    () =>
-      new Fuse(
-        unverified.map((v) => ({
-          item: v,
-          code: v.code,
-          date: formatDate(v.txDate),
-          total: String(v.total),
-        })),
-        { keys: ["code", "date", "total"], threshold: 0.4, ignoreLocation: true },
-      ),
-    [unverified],
+    [vouchers],
   );
   const fuseSpends = useMemo(
     () =>
@@ -134,14 +119,10 @@ export default function RecordsScreen() {
   );
   const q = query.trim();
 
-  const filteredVerified = useMemo(() => {
-    if (!q) return verified;
-    return fuseVerified.search(q).map((r) => r.item.item);
-  }, [q, verified, fuseVerified]);
-  const filteredUnverified = useMemo(() => {
-    if (!q) return unverified;
-    return fuseUnverified.search(q).map((r) => r.item.item);
-  }, [q, unverified, fuseUnverified]);
+  const searchedVouchers = useMemo(() => {
+    if (!q) return vouchers;
+    return fuseVouchers.search(q).map((r) => r.item.item);
+  }, [q, vouchers, fuseVouchers]);
   const filteredSpends = useMemo(() => {
     if (!q) return spends;
     return fuseSpends.search(q).map((r) => r.item.item);
@@ -211,6 +192,20 @@ export default function RecordsScreen() {
             setQuery("");
           }}
         />
+
+        {/* Cash vs Voucher verification type — only within the voucher tabs. */}
+        {(seg === "verified" || seg === "unverified") && (
+          <div className="mt-2">
+            <SegControl
+              options={[
+                { id: "voucher", label: "Voucher" },
+                { id: "cash", label: "Cash" },
+              ]}
+              value={vType}
+              onChange={(v) => setVType(v as VType)}
+            />
+          </div>
+        )}
 
         <div className="mt-3 flex h-10 items-center gap-2 border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3">
           <Search
@@ -331,19 +326,31 @@ export default function RecordsScreen() {
           </section>
         ) : (
           (() => {
-            const baseList =
-              seg === "verified" ? filteredVerified : filteredUnverified;
-            const list =
-              seg === "verified" && vFilter !== "all"
-                ? baseList.filter(
-                    (v) => verifyStatusOf(v.verifyAmount, v.total) === vFilter,
-                  )
-                : baseList;
+            const verifiedSeg = seg === "verified";
+            // Cash sub-tab filters by cash status; Voucher sub-tab by voucher
+            // status. Verified seg = the flag is true; Unverified = false.
+            const byType = (v: (typeof vouchers)[number]) =>
+              vType === "cash"
+                ? verifiedSeg
+                  ? v.cashVerified
+                  : !v.cashVerified
+                : verifiedSeg
+                  ? v.verified
+                  : !v.verified;
+            // Reconciliation (tallied/excess/shortage) only applies to
+            // voucher-verified vouchers.
+            const showRecon = verifiedSeg && vType === "voucher";
+            let list = searchedVouchers.filter(byType);
+            if (showRecon && vFilter !== "all") {
+              list = list.filter(
+                (v) => verifyStatusOf(v.verifyAmount, v.total) === vFilter,
+              );
+            }
             const total = list.reduce((a, v) => a + v.total, 0);
-            const noun = seg === "verified" ? "verified" : "unverified";
+            const noun = `${vType} ${verifiedSeg ? "verified" : "unverified"}`;
             return (
               <section className="flex flex-col gap-3">
-                {seg === "verified" && (
+                {showRecon && (
                   <div className="flex flex-wrap gap-2">
                     {(
                       [
@@ -392,6 +399,7 @@ export default function RecordsScreen() {
                       <VoucherRow
                         key={v.id}
                         voucher={v}
+                        showVoucherPending
                         spentAmount={spentMap.get(v.id)?.amount ?? 0}
                         spentDenoms={spentMap.get(v.id)?.denoms}
                         onRowTap={() =>

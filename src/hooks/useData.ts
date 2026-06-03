@@ -24,6 +24,7 @@ import {
   toWire,
 } from "@/lib/denoms";
 import { type ActivityType, buildActivity } from "@/lib/activity";
+import { getOperatorName } from "@/lib/operator";
 import { useAuth } from "@/hooks/useAuth";
 
 // ── Client-side document types ─────────────────────────────────────────
@@ -32,6 +33,7 @@ export interface Route {
   id: string;
   name: string;
   voucherCount: number;
+  createdByName: string | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -58,6 +60,7 @@ export interface Voucher {
   /** Counted amount entered at verification. Data-only; not summed anywhere. */
   verifyAmount: number | null;
   txDate: string;
+  createdByName: string | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -72,6 +75,7 @@ export interface Spend {
   amount: number;
   denoms: DenomCounts;
   txDate: string;
+  createdByName: string | null;
   createdAt: number;
 }
 
@@ -89,6 +93,7 @@ export interface Ledger {
   id: string;
   name: string;
   entryCount: number;
+  createdByName: string | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -102,6 +107,7 @@ export interface LedgerEntry {
   denoms: DenomCounts;
   note: string | null;
   txDate: string;
+  createdByName: string | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -113,6 +119,7 @@ export interface Exchange {
   toDenoms: DenomCounts;
   note: string | null;
   txDate: string;
+  createdByName: string | null;
   createdAt: number;
 }
 
@@ -125,6 +132,7 @@ export interface Activity {
   amount: number | null;
   txDate: string | null;
   meta: Record<string, unknown>;
+  actorName: string;
   createdAt: number;
 }
 
@@ -143,11 +151,16 @@ function tsToMillisOrNull(v: unknown): number | null {
   return null;
 }
 
+function nameOrNull(v: unknown): string | null {
+  return typeof v === "string" && v.trim() ? v : null;
+}
+
 function mapRoute(id: string, d: DocumentData): Route {
   return {
     id,
     name: typeof d.name === "string" ? d.name : "",
     voucherCount: typeof d.voucherCount === "number" ? d.voucherCount : 0,
+    createdByName: nameOrNull(d.createdByName),
     createdAt: tsToMillis(d.createdAt),
     updatedAt: tsToMillis(d.updatedAt),
   };
@@ -168,6 +181,7 @@ function mapVoucher(id: string, d: DocumentData): Voucher {
     verifyAmount:
       typeof d.verifyAmount === "number" ? d.verifyAmount : null,
     txDate: typeof d.txDate === "string" ? d.txDate : "",
+    createdByName: nameOrNull(d.createdByName),
     createdAt: tsToMillis(d.createdAt),
     updatedAt: tsToMillis(d.updatedAt),
   };
@@ -183,6 +197,7 @@ function mapSpend(id: string, d: DocumentData): Spend {
     amount: typeof d.amount === "number" ? d.amount : 0,
     denoms: fromWire(d.denoms as DenomCountsWire),
     txDate: typeof d.txDate === "string" ? d.txDate : "",
+    createdByName: nameOrNull(d.createdByName),
     createdAt: tsToMillis(d.createdAt),
   };
 }
@@ -204,6 +219,7 @@ function mapLedger(id: string, d: DocumentData): Ledger {
     id,
     name: typeof d.name === "string" ? d.name : "",
     entryCount: typeof d.entryCount === "number" ? d.entryCount : 0,
+    createdByName: nameOrNull(d.createdByName),
     createdAt: tsToMillis(d.createdAt),
     updatedAt: tsToMillis(d.updatedAt),
   };
@@ -221,6 +237,7 @@ function mapLedgerEntry(id: string, d: DocumentData): LedgerEntry {
     denoms: fromWire(d.denoms as DenomCountsWire),
     note: typeof d.note === "string" ? d.note : null,
     txDate: typeof d.txDate === "string" ? d.txDate : "",
+    createdByName: nameOrNull(d.createdByName),
     createdAt: tsToMillis(d.createdAt),
     updatedAt: tsToMillis(d.updatedAt),
   };
@@ -234,6 +251,7 @@ function mapExchange(id: string, d: DocumentData): Exchange {
     toDenoms: fromWire(d.toDenoms as DenomCountsWire),
     note: typeof d.note === "string" ? d.note : null,
     txDate: typeof d.txDate === "string" ? d.txDate : "",
+    createdByName: nameOrNull(d.createdByName),
     createdAt: tsToMillis(d.createdAt),
   };
 }
@@ -251,6 +269,7 @@ function mapActivity(id: string, d: DocumentData): Activity {
       d.meta && typeof d.meta === "object"
         ? (d.meta as Record<string, unknown>)
         : {},
+    actorName: typeof d.actorName === "string" ? d.actorName : "",
     createdAt: tsToMillis(d.createdAt),
   };
 }
@@ -822,6 +841,7 @@ export async function createRoute(
   batch.set(ref, {
     name: input.name,
     voucherCount: 0,
+    createdByName: getOperatorName(),
     createdAt: now,
     updatedAt: now,
   });
@@ -899,6 +919,7 @@ export async function createVoucher(
     verifiedAt: null,
     verifyAmount: null,
     txDate: input.txDate,
+    createdByName: getOperatorName(),
     createdAt: now,
     updatedAt: now,
   });
@@ -1251,6 +1272,7 @@ export async function createSpend(
     amount: input.amount,
     denoms: toWire(input.denoms),
     txDate: input.txDate,
+    createdByName: getOperatorName(),
     createdAt: now,
   });
 
@@ -1501,6 +1523,7 @@ export async function createLedger(
   batch.set(ref, {
     name: input.name,
     entryCount: 0,
+    createdByName: getOperatorName(),
     createdAt: now,
     updatedAt: now,
   });
@@ -1601,6 +1624,7 @@ export async function createLedgerEntry(
     denoms: toWire(input.denoms),
     note: input.note,
     txDate: input.txDate,
+    createdByName: getOperatorName(),
     createdAt: now,
     updatedAt: now,
   });
@@ -1758,6 +1782,7 @@ export async function createExchange(
     toDenoms: toWire(input.toDenoms),
     note: input.note,
     txDate: input.txDate,
+    createdByName: getOperatorName(),
     createdAt: now,
   });
 
